@@ -1,7 +1,27 @@
+# Dependencies and generated frontend output
 node_modules/
 dist/
-backend/__pycache__/
-backend/*.sqlite3
-backend/.venv/
-.env
+.vite/
+coverage/
+
+# Python environments, bytecode, and test caches
 .venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local databases and logs
+*.sqlite3
+*.db
+*.log
+
+# Local secrets and environment configuration
+.env
+.env.*
+!.env.example
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
