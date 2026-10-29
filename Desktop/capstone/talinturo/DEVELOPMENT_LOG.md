@@ -1,5 +1,17 @@
 # Talinturo Development Log
 
+## October 29, 2026 — Settings customization and OAuth basics
+
+### Settings and readability
+- Added Settings color pickers for the accent, page background, primary text, and secondary text colors. Theme changes apply throughout the app, preview live, and persist in local storage.
+- Increased interface text sizes by 3px and added adaptive text shadows: when text and page background have similar brightness, the text uses a thin opposite-color shadow; otherwise, no shadow is applied.
+
+### Google OAuth basics
+- Added the basic Google OAuth sign-in flow using Authlib, including provider redirect/callback, verified-email account creation or linking, session restoration, and a Google sign-in button with failure feedback. Server credentials and redirect URLs are configurable through environment variables; tests cover the OAuth flow and account-linking behavior.
+
+### Validation
+- Validation: `npm run build` — passed.
+
 ## October 28, 2026 — Initial full-stack MVP
 
 ### Project setup
@@ -24,7 +36,7 @@
 
 ### Follow-up work
 
-- Configure a real OAuth provider and password-reset email/token delivery.
+- Configure production Google OAuth credentials and approved callback URLs; add password-reset email/token delivery.
 - Integrate and validate FSL learning content with Deaf FSL signers and educators.
 - Add a real sign-recognition model if camera-based recognition is required. The current camera feature is preview-only and does not recognize signs.
 - Replace demonstration learner records and progress summaries with authenticated, persisted production data.
