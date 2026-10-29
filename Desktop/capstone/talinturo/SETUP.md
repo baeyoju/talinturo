@@ -18,7 +18,7 @@ In the first terminal:
 ```powershell
 cd backend
 py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.`venv\Scripts\Activate.ps1`
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 python app.py
@@ -53,7 +53,26 @@ The development app signs in to the learner demo automatically. Use **Instructor
 | Learner | `learner@example.com` | `Talinturo2025!` |
 | Instructor | `teacher@example.com` | `Talinturo2025!` |
 
-New accounts created through sign up are stored in the local database with salted PBKDF2 password hashes. OAuth sign-in and password-reset email delivery are not configured in this development setup.
+New accounts created through sign up are stored in the local database with salted PBKDF2 password hashes. Google sign-in creates or links an account only when Google confirms the email address. Password-reset email delivery is not configured in this development setup.
+
+## Google sign-in setup
+
+In Google Cloud Console, configure the OAuth consent screen and add your account as a test user if the app is in testing mode. Create an OAuth client ID for a **Web application**, with this authorized JavaScript origin and redirect URI:
+
+- Origin: `http://127.0.0.1:5173`
+- Redirect URI: `http://127.0.0.1:5173/api/auth/google/callback`
+
+Set the client ID and secret in the terminal that runs Flask. Keep the secret private and do not commit it:
+
+```powershell
+$env:GOOGLE_CLIENT_ID = "your-client-id"
+$env:GOOGLE_CLIENT_SECRET = "your-client-secret"
+$env:GOOGLE_REDIRECT_URI = "http://127.0.0.1:5173/api/auth/google/callback"
+$env:TALINTURO_FRONTEND_URL = "http://127.0.0.1:5173"
+python app.py
+```
+
+Use the exact same host throughout; `localhost` and `127.0.0.1` are different OAuth origins. For deployment, register the HTTPS callback URI with Google and set these variables to the deployed HTTPS URLs. Use a stable, private `TALINTURO_SECRET_KEY` so OAuth state verification succeeds after Google redirects back. Vite proxies `/api` to Flask during local development.
 
 ## Verify the setup
 

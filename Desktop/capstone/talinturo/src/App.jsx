@@ -51,6 +51,36 @@ const scenarios = [
   { title: "Lunchtime at school", tag: "School", emoji: "🍱", color: "mint", description: "Share what you like and ask a classmate a question." },
 ];
 
+function colorLuminance(color) {
+  const channels = color.match(/[0-9a-f]{2}/gi)?.map((channel) => parseInt(channel, 16) / 255);
+  if (!channels || channels.length !== 3) return null;
+  return channels
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+    .reduce((total, channel, index) => total + channel * [0.2126, 0.7152, 0.0722][index], 0);
+}
+
+function textShadow(textColor, backgroundColor) {
+  const textLuminance = colorLuminance(textColor);
+  const backgroundLuminance = colorLuminance(backgroundColor);
+  if (textLuminance === null || backgroundLuminance === null) return "none";
+
+  const textIsDark = textLuminance <= 0.5;
+  const backgroundIsDark = backgroundLuminance <= 0.5;
+  if (textIsDark !== backgroundIsDark) return "none";
+
+  const shadowColor = textIsDark ? "#f7f5ef" : "#626a64";
+  return [
+    `.65px 0 ${shadowColor}`,
+    `-.65px 0 ${shadowColor}`,
+    `0 .65px ${shadowColor}`,
+    `0 -.65px ${shadowColor}`,
+    `.46px .46px ${shadowColor}`,
+    `-.46px .46px ${shadowColor}`,
+    `.46px -.46px ${shadowColor}`,
+    `-.46px -.46px ${shadowColor}`,
+  ].join(", ");
+}
+
 function Toast({ message, onClose }) {
   useEffect(() => {
     if (!message) return undefined;
@@ -62,6 +92,20 @@ function Toast({ message, onClose }) {
 
 function App() {
   const [role, setRole] = useState(localStorage.getItem("talinturo-role") || "learner");
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem("talinturo-settings");
+    return {
+      reminders: true,
+      sound: true,
+      reducedMotion: false,
+      weekly: false,
+      themeAccent: "#2a694e",
+      themeBackground: "#f5f7f2",
+      themeText: "#26372d",
+      themeMuted: "#829087",
+      ...(saved ? JSON.parse(saved) : {}),
+    };
+  });
   const [user, setUser] = useState({
     name: localStorage.getItem("talinturo-name") || "Alex Rivera",
     email: role === "instructor" ? "teacher@example.com" : "learner@example.com",
@@ -77,18 +121,30 @@ function App() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api("/auth/demo", { method: "POST", body: JSON.stringify({ role }) })
+    api("/auth/me")
       .then((result) => {
         setApiOnline(true);
-        setUser((current) => ({ ...result.user, name: localStorage.getItem("talinturo-name") || result.user.name }));
+        setRole(result.user.role);
+        localStorage.setItem("talinturo-role", result.user.role);
+        localStorage.setItem("talinturo-name", result.user.name);
+        setUser(result.user);
       })
-      .catch(() => setApiOnline(false));
+      .catch(() => api("/auth/demo", { method: "POST", body: JSON.stringify({ role }) })
+        .then((result) => {
+          setApiOnline(true);
+          setUser((current) => ({ ...result.user, name: localStorage.getItem("talinturo-name") || result.user.name }));
+        })
+        .catch(() => setApiOnline(false)));
   }, []);
 
   useEffect(() => {
     setMobileOpen(false);
     setMenuOpen(false);
-  }, [location.pathname]);
+    if (new URLSearchParams(location.search).has("oauth_error")) {
+      setToast("Google sign-in failed. Please try again or use email and password.");
+      navigate("/login", { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
 
   const changeRole = async (nextRole) => {
     setRole(nextRole);
@@ -118,7 +174,16 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={{
+      "--green": settings.themeAccent,
+      "--green-dark": `color-mix(in srgb, ${settings.themeAccent} 75%, black)`,
+      "--green-soft": `color-mix(in srgb, ${settings.themeAccent} 12%, white)`,
+      "--canvas": settings.themeBackground,
+      "--ink": settings.themeText,
+      "--ink-shadow": textShadow(settings.themeText, settings.themeBackground),
+      "--muted": settings.themeMuted,
+      "--muted-shadow": textShadow(settings.themeMuted, settings.themeBackground),
+    }}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <Link className="brand" to="/" aria-label="Talinturo home">
           <span className="brand-mark">t<span>✳</span></span>
@@ -188,7 +253,7 @@ function App() {
                 setToast(`Couldn't update your profile: ${error.message}`);
               }
             }} />} />
-            <Route path="/settings" element={<Settings onToast={setToast} />} />
+            <Route path="/settings" element={<Settings settings={settings} setSettings={setSettings} onToast={setToast} />} />
             <Route path="/help" element={<Help />} />
             <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { localStorage.setItem("talinturo-name", account.name); localStorage.setItem("talinturo-role", account.role); setRole(account.role); setUser(account); navigate(account.role === "instructor" ? "/instructor" : "/"); }} onToast={setToast} />} />
             <Route path="/signup" element={<AuthPage mode="signup" onAuth={(account) => { localStorage.setItem("talinturo-name", account.name); localStorage.setItem("talinturo-role", "learner"); setRole("learner"); setUser(account); navigate("/profile/setup"); }} onToast={setToast} />} />
@@ -513,17 +578,27 @@ function CreateClassroom({ onNavigate, onToast }) {
       return <><PageTitle eyebrow="THIS IS YOUR SPACE" title="My profile" description="Make your learning space feel a little more like you." /><form className="profile-form panel" onSubmit={(event) => { event.preventDefault(); onSave({ name: name.trim() || user.name, learner_type: age, learning_goal: goal }); }}><div className="profile-edit-head"><span className="avatar avatar-large avatar-mint">{name.split(" ").map((part) => part[0]).slice(0, 2).join("") || "AR"}</span><div><h2>{name || "Your name"}</h2><p>Explorer · Joined this year</p></div><button type="button" className="button button-outline" onClick={() => document.getElementById("profile-name")?.focus()}>Edit details</button></div><div className="profile-fields"><label>Display name<input id="profile-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={70} /></label><label>Email address<input type="email" value={user.email || ""} readOnly /></label><label>Learning as<select value={age} onChange={(event) => setAge(event.target.value)}><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Everyday conversations</option><option>Connect with family</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label></div><div className="form-actions"><Link className="text-link" to="/settings">Account settings →</Link><Button type="submit">Save changes</Button></div></form></>;
     }
 
-    function Settings({ onToast }) {
-      const [settings, setSettings] = useState(() => {
-        const saved = localStorage.getItem("talinturo-settings");
-        return saved ? JSON.parse(saved) : { reminders: true, sound: true, reducedMotion: false, weekly: false };
-      });
+    function Settings({ settings, setSettings, onToast }) {
       const toggle = (key) => {
         const next = { ...settings, [key]: !settings[key] };
         setSettings(next);
         localStorage.setItem("talinturo-settings", JSON.stringify(next));
       };
-      return <><PageTitle eyebrow="MAKE IT YOUR OWN" title="Settings" description="A few little choices to make learning feel just right for you." /><div className="settings-layout"><section className="panel settings-panel"><p className="eyebrow">YOUR EXPERIENCE</p><h2>Learning preferences</h2><SettingRow title="Gentle practice reminders" text="A friendly nudge to help you keep your learning streak." checked={settings.reminders} onChange={() => toggle("reminders")} /><SettingRow title="Sound effects" text="Play a little sound when you finish an activity." checked={settings.sound} onChange={() => toggle("sound")} /><SettingRow title="Reduce motion" text="Use fewer animations throughout the app." checked={settings.reducedMotion} onChange={() => toggle("reducedMotion")} /></section><section className="panel settings-panel"><p className="eyebrow">KEEP IN THE LOOP</p><h2>Email updates</h2><SettingRow title="Weekly learning summary" text="A quick recap of your progress and little wins." checked={settings.weekly} onChange={() => toggle("weekly")} /><div className="setting-danger"><div><strong>Need a fresh start?</strong><small>Reset your local practice activity. Your account stays safe.</small></div><button onClick={() => onToast("Progress reset is not available in this demo.")}>Reset practice data</button></div></section><div className="settings-footer"><span>Preferences are saved on this device.</span><button className="button button-outline" onClick={() => { localStorage.setItem("talinturo-settings", JSON.stringify(settings)); onToast("Your preferences have been saved."); }}>Save preferences</button></div></div></>;
+      const updateColor = (key, value) => {
+        const next = { ...settings, [key]: value };
+        setSettings(next);
+        localStorage.setItem("talinturo-settings", JSON.stringify(next));
+      };
+      return <><PageTitle eyebrow="MAKE IT YOUR OWN" title="Settings" description="A few little choices to make learning feel just right for you." /><div className="settings-layout"><section className="panel settings-panel theme-panel"><p className="eyebrow">YOUR LOOK & FEEL</p><h2>Make your own theme</h2><p className="theme-description">Choose colors for your interface and text. Your changes apply right away and are saved on this device.</p><div className="theme-colors">
+        <ThemeColor title="Accent color" text="Buttons, links, and highlights" value={settings.themeAccent} onChange={(value) => updateColor("themeAccent", value)} />
+        <ThemeColor title="Page background" text="The app's canvas" value={settings.themeBackground} onChange={(value) => updateColor("themeBackground", value)} />
+        <ThemeColor title="Main text" text="Headings and primary text" value={settings.themeText} onChange={(value) => updateColor("themeText", value)} />
+        <ThemeColor title="Secondary text" text="Supporting text and labels" value={settings.themeMuted} onChange={(value) => updateColor("themeMuted", value)} />
+      </div><div className="theme-preview" style={{ "--preview-accent": settings.themeAccent, "--preview-background": settings.themeBackground, "--preview-text": settings.themeText, "--preview-shadow": textShadow(settings.themeText, settings.themeBackground), "--preview-muted-shadow": textShadow(settings.themeMuted, settings.themeBackground) }}><div className="theme-preview-mark">t</div><div><strong>Your theme preview</strong><small>A little glimpse of your new look</small></div><button type="button">Sample button</button></div></section><section className="panel settings-panel"><p className="eyebrow">YOUR EXPERIENCE</p><h2>Learning preferences</h2><SettingRow title="Gentle practice reminders" text="A friendly nudge to help you keep your learning streak." checked={settings.reminders} onChange={() => toggle("reminders")} /><SettingRow title="Sound effects" text="Play a little sound when you finish an activity." checked={settings.sound} onChange={() => toggle("sound")} /><SettingRow title="Reduce motion" text="Use fewer animations throughout the app." checked={settings.reducedMotion} onChange={() => toggle("reducedMotion")} /></section><section className="panel settings-panel"><p className="eyebrow">KEEP IN THE LOOP</p><h2>Email updates</h2><SettingRow title="Weekly learning summary" text="A quick recap of your progress and little wins." checked={settings.weekly} onChange={() => toggle("weekly")} /><div className="setting-danger"><div><strong>Need a fresh start?</strong><small>Reset your local practice activity. Your account stays safe.</small></div><button onClick={() => onToast("Progress reset is not available in this demo.")}>Reset practice data</button></div></section><div className="settings-footer"><span>Preferences are saved on this device.</span><button className="button button-outline" onClick={() => { localStorage.setItem("talinturo-settings", JSON.stringify(settings)); onToast("Your preferences have been saved."); }}>Save preferences</button></div></div></>;
+    }
+
+    function ThemeColor({ title, text, value, onChange }) {
+      return <label className="theme-color-control"><span><strong>{title}</strong><small>{text}</small></span><span className="theme-color-input"><input type="color" value={value} aria-label={title} onChange={(event) => onChange(event.target.value)} /><code>{value.toUpperCase()}</code></span></label>;
     }
 
     function SettingRow({ title, text, checked, onChange }) {
@@ -560,7 +635,7 @@ function CreateClassroom({ onNavigate, onToast }) {
           setLoading(false);
         }
       };
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span>✳</span></span><strong>talinturo</strong></Link><span className="auth-flower">🌼</span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" onClick={() => onToast("OAuth sign-in is a deployment integration and isn't configured in this demo.")}>◎ Continue with Google</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Social sign-in requires a configured OAuth provider.</p></section><aside className="auth-side"><div className="auth-side-art"><span>👋</span><i>✦</i><b>✿</b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span>✳</span></span><strong>talinturo</strong></Link><span className="auth-flower">🌼</span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" onClick={() => window.location.assign("/api/auth/google")}>◎ Continue with Google</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google sign-in securely authenticates through Google.</p></section><aside className="auth-side"><div className="auth-side-art"><span>👋</span><i>✦</i><b>✿</b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function ForgotPassword({ onToast }) {

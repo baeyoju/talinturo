@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import app as backend
@@ -55,6 +56,63 @@ class TalinturoApiTests(unittest.TestCase):
             json={"email": "taylor@example.com", "password": "incorrect"},
         )
         self.assertEqual(invalid_login.status_code, 401)
+
+    def test_google_sign_in_requires_server_credentials(self):
+        with patch.object(backend, "GOOGLE_CLIENT_ID", ""), patch.object(
+            backend, "GOOGLE_CLIENT_SECRET", ""
+        ):
+            response = self.client.get("/api/auth/google")
+        self.assertEqual(response.status_code, 503)
+
+    def test_google_sign_in_redirects_to_provider(self):
+        with patch.object(backend, "GOOGLE_CLIENT_ID", "client-id"), patch.object(
+            backend, "GOOGLE_CLIENT_SECRET", "client-secret"
+        ), patch.object(backend.google, "authorize_redirect", return_value=backend.redirect("https://accounts.google.com")) as authorize:
+            response = self.client.get("/api/auth/google")
+        self.assertEqual(response.status_code, 302)
+        authorize.assert_called_once_with(backend.GOOGLE_REDIRECT_URI)
+
+    def test_google_callback_creates_account_and_restores_session(self):
+        userinfo = {
+            "sub": "google-subject-123",
+            "email": "new.google@example.com",
+            "email_verified": True,
+            "name": "Google Learner",
+        }
+        with patch.object(backend, "GOOGLE_CLIENT_ID", "client-id"), patch.object(
+            backend, "GOOGLE_CLIENT_SECRET", "client-secret"
+        ), patch.object(backend.google, "authorize_access_token", return_value={"userinfo": userinfo}):
+            response = self.client.get("/api/auth/google/callback")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], backend.FRONTEND_URL)
+        current_user = self.client.get("/api/auth/me")
+        self.assertEqual(current_user.status_code, 200)
+        self.assertEqual(current_user.get_json()["user"]["email"], userinfo["email"])
+
+    def test_google_sign_in_rejects_unverified_email(self):
+        with self.assertRaises(ValueError):
+            backend.get_or_create_google_user(
+                {"sub": "unverified", "email": "person@example.com", "email_verified": False}
+            )
+
+    def test_google_sign_in_links_verified_existing_account(self):
+        existing = self.client.post(
+            "/api/auth/signup",
+            json={"name": "Existing Learner", "email": "existing@example.com", "password": "safe-password"},
+        ).get_json()["user"]
+        with backend.app.app_context():
+            linked = backend.get_or_create_google_user(
+                {
+                    "sub": "google-existing-user",
+                    "email": "EXISTING@example.com",
+                    "email_verified": True,
+                    "name": "Google Name",
+                }
+            )
+            user_count = backend.get_db().execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        self.assertEqual(linked["id"], existing["id"])
+        self.assertEqual(user_count, 3)
 
     def test_progress_requires_session_and_valid_score(self):
         self.assertEqual(

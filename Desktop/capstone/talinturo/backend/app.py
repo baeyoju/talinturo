@@ -6,12 +6,19 @@ import sqlite3
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, g, jsonify, request, session
+from authlib.integrations.flask_client import OAuth
+from flask import Flask, g, jsonify, redirect, request, session
 from flask_cors import CORS
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = Path(os.environ.get("TALINTURO_DATABASE", BASE_DIR / "talinturo.sqlite3"))
 DEMO_MODE = os.environ.get("TALINTURO_DEMO_MODE", "true").lower() == "true"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.environ.get(
+    "GOOGLE_REDIRECT_URI", "http://127.0.0.1:5173/api/auth/google/callback"
+)
+FRONTEND_URL = os.environ.get("TALINTURO_FRONTEND_URL", "http://127.0.0.1:5173").rstrip("/")
 
 app = Flask(__name__)
 app.config.update(
@@ -19,6 +26,14 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("TALINTURO_COOKIE_SECURE", "false").lower() == "true",
+)
+oauth = OAuth(app)
+google = oauth.register(
+    name="google",
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
 )
 CORS(
     app,
@@ -64,6 +79,14 @@ def initialize_database():
                 learner_type TEXT NOT NULL DEFAULT 'Adult learner',
                 learning_goal TEXT NOT NULL DEFAULT 'Everyday conversations',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS oauth_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(provider, subject)
             );
             CREATE TABLE IF NOT EXISTS classrooms (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -159,6 +182,40 @@ def public_user(row):
     }
 
 
+def get_or_create_google_user(userinfo):
+    subject = str(userinfo.get("sub", "")).strip()
+    email = str(userinfo.get("email", "")).strip().lower()
+    if not subject or not email or userinfo.get("email_verified") is not True:
+        raise ValueError("Google did not provide a verified account email.")
+
+    db = get_db()
+    linked_user = db.execute(
+        """SELECT users.* FROM users
+           JOIN oauth_accounts ON oauth_accounts.user_id = users.id
+           WHERE oauth_accounts.provider = ? AND oauth_accounts.subject = ?""",
+        ("google", subject),
+    ).fetchone()
+    if linked_user is not None:
+        return linked_user
+
+    user = db.execute("SELECT * FROM users WHERE lower(email) = ?", (email,)).fetchone()
+    if user is None:
+        salt, password_hash = hash_password(secrets.token_urlsafe(48))
+        name = str(userinfo.get("name", "Google learner")).strip()[:70] or "Google learner"
+        user_id = db.execute(
+            "INSERT INTO users(name, email, password_salt, password_hash) VALUES(?, ?, ?, ?)",
+            (name, email, salt, password_hash),
+        ).lastrowid
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+    db.execute(
+        "INSERT INTO oauth_accounts(provider, subject, user_id) VALUES(?, ?, ?)",
+        ("google", subject, user["id"]),
+    )
+    db.commit()
+    return user
+
+
 @app.get("/")
 def home():
     return jsonify({"success": True, "message": "Talinturo API is running."})
@@ -167,6 +224,30 @@ def home():
 @app.get("/api/health")
 def health():
     return jsonify({"success": True, "message": "Talinturo API is healthy."})
+
+
+@app.get("/api/auth/google")
+def google_login():
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return json_error("Google sign-in is not configured on the server.", 503)
+    return google.authorize_redirect(GOOGLE_REDIRECT_URI)
+
+
+@app.get("/api/auth/google/callback")
+def google_callback():
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return json_error("Google sign-in is not configured on the server.", 503)
+    try:
+        token = google.authorize_access_token()
+        user = get_or_create_google_user(token.get("userinfo") or {})
+    except Exception:
+        app.logger.exception("Google sign-in failed")
+        return redirect(f"{FRONTEND_URL}/login?oauth_error=google")
+
+    session.clear()
+    session["user_id"] = user["id"]
+    session["role"] = user["role"]
+    return redirect(FRONTEND_URL)
 
 
 @app.post("/api/auth/demo")
