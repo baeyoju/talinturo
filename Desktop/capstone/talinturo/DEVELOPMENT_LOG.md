@@ -1,5 +1,25 @@
 # Talinturo Development Log
 
+## October 31, 2026 — Responsive layouts, interface icons, and local preview
+
+### Responsive layout fixes
+
+- Updated the landing page layout to adapt to its available width, with responsive header, hero, feature, and scenario sections for desktop and mobile.
+- Removed legacy fixed-width landing-page styles and corrected narrow-screen overflow and sidebar spacing.
+- Made the Help & About FAQ panel match the width of the page title, introduction, and contact text.
+
+### Interface iconography
+
+- Replaced decorative interface emojis with a consistent inline SVG icon set across navigation, dashboard cards, progress, classroom, practice, authentication, and feedback screens.
+- Kept emojis that illustrate learning content, including vocabulary and scenario examples.
+
+### Validation and preview
+
+- `npm run build` — passed after the responsive and icon changes.
+- Browser checks confirmed the landing page has no horizontal overflow down to 320px and the Help & About sections align at desktop and mobile widths.
+- Checked icon rendering on the dashboard, Help & About, progress, instructor, classrooms, practice, and login screens; no empty SVG icons were found.
+- Ran the Vite development server bound to `0.0.0.0` for phone preview and confirmed `http://192.168.11.10:5173` responded successfully on the local network.
+
 ## October 29, 2026 — Settings customization and OAuth basics
 
 ### Settings and readability

@@ -4,23 +4,23 @@ import { api } from "./api.js";
 
 const learnerNav = [
   { heading: "LEARN" },
-  { label: "Dashboard", to: "/", icon: "⌂" },
-  { label: "Learning paths", to: "/paths", icon: "▤" },
-  { label: "FSL vocabulary", to: "/vocabulary", icon: "Aa" },
-  { label: "Sign practice", to: "/practice", icon: "✋" },
-  { label: "Scenarios", to: "/scenarios", icon: "◉" },
+  { label: "Dashboard", to: "/", icon: "home" },
+  { label: "Learning paths", to: "/paths", icon: "bookOpen" },
+  { label: "FSL vocabulary", to: "/vocabulary", icon: "book" },
+  { label: "Sign practice", to: "/practice", icon: "hand" },
+  { label: "Scenarios", to: "/scenarios", icon: "message" },
   { heading: "YOUR JOURNEY" },
-  { label: "My progress", to: "/progress", icon: "↗" },
-  { label: "Level challenge", to: "/challenge", icon: "✦" },
+  { label: "My progress", to: "/progress", icon: "star" },
+  { label: "Level challenge", to: "/challenge", icon: "sparkles" },
 ];
 
 const instructorNav = [
   { heading: "TEACH" },
-  { label: "Instructor dashboard", to: "/instructor", icon: "⌂" },
-  { label: "Learners", to: "/learners", icon: "♧" },
-  { label: "Virtual classrooms", to: "/classrooms", icon: "▦" },
+  { label: "Instructor dashboard", to: "/instructor", icon: "home" },
+  { label: "Learners", to: "/learners", icon: "users" },
+  { label: "Virtual classrooms", to: "/classrooms", icon: "school" },
   { heading: "YOUR ACCOUNT" },
-  { label: "My progress", to: "/progress", icon: "↗" },
+  { label: "My progress", to: "/progress", icon: "star" },
 ];
 
 const lessons = [
@@ -50,6 +50,39 @@ const scenarios = [
   { title: "Meeting a new friend", tag: "Social", emoji: "🧑‍🤝‍🧑", color: "lavender", description: "Introduce yourself and learn a little about someone new." },
   { title: "Lunchtime at school", tag: "School", emoji: "🍱", color: "mint", description: "Share what you like and ask a classmate a question." },
 ];
+
+const iconArtwork = {
+  book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" /><path d="M4 5.5v16M8 7h8M8 11h8" /></>,
+  bookOpen: <><path d="M12 7v14M12 7C9.5 4.5 6.5 4 3 4v14c3.5 0 6.5.5 9 3M12 7c2.5-2.5 5.5-3 9-3v14c-3.5 0-6.5.5-9 3" /></>,
+  brain: <><path d="M12 5a3 3 0 0 0-5.8-1 3.5 3.5 0 0 0-2.1 5.8 3.5 3.5 0 0 0 1 5.8A3 3 0 0 0 8 20a3 3 0 0 0 4-2.8z" /><path d="M12 5a3 3 0 0 1 5.8-1 3.5 3.5 0 0 1 2.1 5.8 3.5 3.5 0 0 1-1 5.8A3 3 0 0 1 16 20a3 3 0 0 1-4-2.8M8 8h.01M7 14h.01M16 8h.01M17 14h.01M9 11h.01M15 11h.01" /></>,
+  users: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" /></>,
+  sparkles: <><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 14l1.1 2.9L23 18l-2.9 1.1L19 22l-1.1-2.9L15 18l2.9-1.1zM5 2l.8 2.2L8 5l-2.2.8L5 8l-.8-2.2L2 5l2.2-.8z" /></>,
+  home: <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z" /></>,
+  school: <><path d="m3 9 9-5 9 5-9 5zM5 11v6c4.5 3 9.5 3 14 0v-6M21 9v7" /></>,
+  globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></>,
+  lifeBuoy: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" /><path d="m5.6 5.6 4.3 4.3m4.2 4.2 4.3 4.3m0-12.8-4.3 4.3m-4.2 4.2-4.3 4.3" /></>,
+  sprout: <><path d="M12 21v-9M12 13c0-5 3-8 8-8 0 5-3 8-8 8zM12 16c0-4-2.5-6-7-6 0 4.5 2.5 6 7 6z" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
+  flame: <><path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-2-1-3-3-3-5-3 3-4 6-4 9a7 7 0 0 0 7 7z" /><path d="M12 22a3 3 0 0 0 3-3c0-1.5-1-2.5-2-4-1 1-2 2-2 4a1 1 0 0 0 1 3z" /></>,
+  star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" />,
+  heart: <path d="M20.8 8.8c0 4.2-8.8 10-8.8 10s-8.8-5.8-8.8-10a4.5 4.5 0 0 1 8.8-1.3 4.5 4.5 0 0 1 8.8 1.3z" />,
+  hand: <><path d="M8 11V5a1.5 1.5 0 0 1 3 0v5-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v6l.5-2a1.5 1.5 0 0 1 3 .5l-1.2 6.2A6.5 6.5 0 0 1 13 21h-1a6 6 0 0 1-4.8-2.4L4 14.5A1.5 1.5 0 0 1 6.4 13z" /></>,
+  lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 1 1 8 0v3M12 14v3" /></>,
+  lightbulb: <><path d="M9 18h6m-5 3h4m-2-20a7 7 0 0 0-4 12.7c.8.6 1 1.4 1 2.3h6c0-.9.2-1.7 1-2.3A7 7 0 0 0 12 1z" /></>,
+  message: <><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
+  volume: <><path d="M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13" /></>,
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+  shield: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z" /><path d="m9 12 2 2 4-4" /></>,
+  compass: <><circle cx="12" cy="12" r="10" /><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z" /></>,
+  store: <><path d="M3 10h18l-1.5-6h-15zM5 10v10h14V10M9 20v-6h6v6" /><path d="M3 10a2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0" /></>,
+  camera: <><path d="M14 5h-4l-2 2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z" /><circle cx="12" cy="13" r="3" /></>,
+};
+
+function Icon({ name, size = 20, className = "" }) {
+  return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{iconArtwork[name]}</svg>;
+}
 
 function colorLuminance(color) {
   const channels = color.match(/[0-9a-f]{2}/gi)?.map((channel) => parseInt(channel, 16) / 255);
@@ -186,7 +219,7 @@ function App() {
     }}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <Link className="brand" to="/" aria-label="Talinturo home">
-          <span className="brand-mark">t<span>✳</span></span>
+          <span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span>
           <span className="brand-name">talinturo<small>FSL, one sign at a time</small></span>
         </Link>
         <div className="sidebar-profile">
@@ -198,26 +231,26 @@ function App() {
           {(role === "instructor" ? instructorNav : learnerNav).map((item, index) =>
             item.heading ? <p className="nav-heading" key={item.heading}>{item.heading}</p> :
               <NavLink key={`${item.to}-${index}`} to={item.to} end={item.to === "/"} className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
-                <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
+                <span className="nav-icon"><Icon name={item.icon} size={19} /></span><span>{item.label}</span>
                 {item.label === "Level challenge" && <span className="nav-pill">NEW</span>}
               </NavLink>,
           )}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-streak"><span>🔥</span><div><strong>6 day streak</strong><small>You're on a roll!</small></div><span className="streak-sparkle">✦</span></div>
+          <div className="sidebar-streak"><Icon name="flame" size={22} /><div><strong>6 day streak</strong><small>You're on a roll!</small></div><span className="streak-sparkle">✦</span></div>
           <Link className="nav-link" to="/help"><span className="nav-icon">?</span><span>Help & about</span></Link>
           <button className="sidebar-account" onClick={() => navigate("/profile")}><span className="avatar avatar-small">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span><strong>{user.name}</strong><small>View profile</small></span><span className="account-dots">···</span></button>
         </div>
       </aside>
       <div className="main-column">
         <header className="topbar">
-          <button className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(!mobileOpen)}>☰</button>
+          <button className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(!mobileOpen)}><Icon name="menu" size={20} /></button>
           <div className="breadcrumb"><span>Talinturo</span><b>/</b><strong>{pageTitle(location.pathname)}</strong></div>
           <div className="top-actions">
             {apiOnline === false && <span className="api-status"><i /> Offline demo</span>}
-            <button className="streak-top" aria-label="Current streak"><span>🔥</span> 6 <small>day streak</small></button>
+            <button className="streak-top" aria-label="Current streak"><Icon name="flame" size={17} /> 6 <small>day streak</small></button>
             <button className="role-switch" onClick={() => changeRole(role === "instructor" ? "learner" : "instructor")}>{role === "instructor" ? "Learner view" : "Instructor view"} <span>↗</span></button>
-            <button className="icon-button notification-button" aria-label="Notifications" onClick={() => setToast("You're all caught up. Keep up the great work!")}>♧<i /></button>
+            <button className="icon-button notification-button" aria-label="Notifications" onClick={() => setToast("You're all caught up. Keep up the great work!")}><Icon name="users" size={17} /><i /></button>
             <div className="profile-menu-wrap">
               <button className="top-profile" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen}><span className="avatar avatar-small">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span>{user.name.split(" ")[0]}</span><b>⌄</b></button>
               {menuOpen && <div className="profile-menu"><Link to="/profile">My profile</Link><Link to="/settings">Settings</Link><button onClick={signOut}>Sign out</button></div>}
@@ -264,7 +297,7 @@ function App() {
             <Route path="*" element={<NotFound onNavigate={navigate} />} />
           </Routes>
         </main>
-        <footer className="footer"><span>Made with <b>♥</b> for a more inclusive world</span><span>© 2026 Talinturo <i>·</i> <Link to="/help">About</Link> <i>·</i> <Link to="/help">Privacy</Link></span></footer>
+        <footer className="footer"><span>Made with <b><Icon name="heart" size={13} /></b> for a more inclusive world</span><span>© 2026 Talinturo <i>·</i> <Link to="/help">About</Link> <i>·</i> <Link to="/help">Privacy</Link></span></footer>
       </div>
       <Toast message={toast} onClose={() => setToast("")} />
     </div>
@@ -294,51 +327,165 @@ function ProgressBar({ value, color = "green" }) {
 }
 
 function Dashboard({ user, onNavigate }) {
-  return <>
-    <section className="welcome-banner">
-      <div className="welcome-copy"><span className="welcome-label"><span>✦</span> YOUR LEARNING SPACE</span><h1>Magandang umaga, {user.name.split(" ")[0]}! <span>☀️</span></h1><p>Every sign is a little step toward understanding. Ready to learn something new?</p><Button onClick={() => onNavigate("/paths")}>Pick up where you left off <span>→</span></Button></div>
-      <div className="welcome-art" aria-hidden="true"><div className="sun-disc">✦</div><div className="art-speech">kumusta!</div><div className="art-hand">🤟</div><span className="art-star star-one">✦</span><span className="art-star star-two">✳</span><span className="art-dot" /></div>
-      <span className="banner-decoration">✿</span>
-    </section>
-    <section className="stats-grid">
-      <StatCard icon="📚" tone="lavender" label="Lessons completed" value="12" change="+2 this week" />
-      <StatCard icon="✋" tone="peach" label="Signs practiced" value="48" change="+8 this week" />
-      <StatCard icon="⏱" tone="mint" label="Learning time" value="3h 25m" change="This month" />
-      <StatCard icon="🔥" tone="yellow" label="Day streak" value="6 days" change="Personal best: 9" />
-    </section>
-    <div className="dashboard-grid">
-      <section className="panel continue-panel">
-        <div className="panel-heading"><div><p className="eyebrow">KEEP YOUR MOMENTUM</p><h2>Continue learning</h2></div><button className="text-link" onClick={() => onNavigate("/paths")}>All lessons <span>→</span></button></div>
-        <div className="continue-lesson"><div className="lesson-illustration peach">👋</div><div className="continue-info"><div className="lesson-meta"><span>FSL FOUNDATIONS</span><span>LESSON 3 OF 4</span></div><h3>Greetings & introductions</h3><div className="lesson-progress-row"><ProgressBar value={75} /><span>75%</span></div></div></div>
-        <div className="lesson-bottom"><span>⏱ About 8 min left</span><Button onClick={() => onNavigate("/paths")}>Continue lesson <span>→</span></Button></div>
-      </section>
-      <section className="panel week-panel">
-        <div className="panel-heading"><div><p className="eyebrow">LITTLE STEPS, BIG WINS</p><h2>Your week</h2></div><button className="more-button" aria-label="More weekly statistics">···</button></div>
-        <div className="week-number"><strong>4</strong><span>learning days this week <b>↗ 2 more</b></span></div>
-        <div className="week-chart" aria-label="Learning activity from Monday through Sunday">{[28, 54, 42, 78, 40, 90, 18].map((height, index) => <div className="week-column" key={index}><div className={index === 5 ? "week-bar week-today" : "week-bar"} style={{ height: `${height}%` }} />{["M", "T", "W", "T", "F", "S", "S"][index] && <small>{["M", "T", "W", "T", "F", "S", "S"][index]}</small>}</div>)}</div>
-        <div className="weekly-goal"><div><span className="goal-icon">✦</span><span><strong>Weekly goal</strong><small>4 of 5 learning days</small></span></div><span className="goal-count">4/5</span></div><ProgressBar value={80} color="peach" />
-      </section>
-      <section className="panel path-panel">
-        <div className="panel-heading"><div><p className="eyebrow">MADE FOR YOUR JOURNEY</p><h2>Your learning paths</h2></div><button className="text-link" onClick={() => onNavigate("/paths")}>Explore all <span>→</span></button></div>
-        <div className="path-cards">
-          <PathPreview icon="🌱" color="mint" title="FSL Foundations" lessons="8 lessons" progress={62} />
-          <PathPreview icon="💬" color="lavender" title="Everyday conversations" lessons="6 lessons" progress={25} />
-          <PathPreview icon="🌟" color="yellow" title="Express yourself" lessons="10 lessons" progress={0} />
+  const featureCards = [
+    { title: "Live lessons", subtitle: "Small-group learning", color: "peach", icon: "bookOpen" },
+    { title: "Story-based practice", subtitle: "Real life scenarios", color: "pink", icon: "brain" },
+    { title: "Family learning", subtitle: "Shared progress", color: "yellow", icon: "users" },
+    { title: "Confidence coaching", subtitle: "Supportive feedback", color: "mint", icon: "sparkles" },
+  ];
+
+  const scenarioCards = [
+    { title: "At home", copy: "Learn everyday phrases and routines in familiar spaces.", color: "sand", icon: "home", badge: "Home" },
+    { title: "At school", copy: "Build confidence with classmates and classroom routines.", color: "pink", icon: "school", badge: "School" },
+    { title: "During travel", copy: "Practice signs you can use when exploring the world.", color: "mint", icon: "globe", badge: "Travel" },
+    { title: "In an emergency", copy: "Know the signs that help you communicate quickly and clearly.", color: "deep", icon: "lifeBuoy", badge: "SOS" },
+  ];
+
+  return (
+    <div className="landing-page">
+      <header className="landing-header">
+        <div className="topbar">
+          <div className="brand-lockup" aria-label="Talinturo home">
+            <div className="brand-mark">T</div>
+            <div className="brand-copy">
+              <span className="brand-title">Talinturo</span>
+              <small>Sign language for every learner</small>
+            </div>
+          </div>
+
+          <nav className="header-nav" aria-label="Main navigation">
+            {[
+              { label: "Programs", href: "/paths" },
+              { label: "Resources", href: "/vocabulary" },
+              { label: "About", href: "/help" },
+              { label: "Support", href: "/practice" },
+            ].map((item) => (
+              <button key={item.label} type="button" className="header-link" onClick={() => onNavigate(item.href)}>{item.label}</button>
+            ))}
+          </nav>
+
+          <div className="header-actions">
+            <button type="button" className="ghost-button" onClick={() => onNavigate("/login")}>Sign in</button>
+            <button type="button" className="primary-button" onClick={() => onNavigate("/practice")}>Get started</button>
+          </div>
         </div>
-      </section>
-      <section className="daily-card">
-        <span className="daily-sparkle">✦</span><p className="eyebrow">TODAY'S LITTLE CHALLENGE</p><h2>Can you sign<br />“thank you”?</h2><p>Practice one useful sign today and add a little kindness to someone's day.</p><Button variant="light" onClick={() => onNavigate("/practice")}>Practice now <span>→</span></Button><div className="daily-emoji">💛</div>
-      </section>
+      </header>
+
+      <main className="landing-main">
+        <section className="hero-section">
+          <div className="hero-copy">
+            <p className="kicker">Learning by doing</p>
+            <h1>
+              Big smiles.<br />
+              Little signs.<br />
+              Big hearts.
+            </h1>
+            <p className="subcopy">
+              We make it easier to learn Filipino Sign Language with supportive lessons, real-life
+              situations, and community-driven practice.
+            </p>
+
+            <div className="hero-actions">
+              <button type="button" className="primary-button" onClick={() => onNavigate("/practice")}>Get started</button>
+              <button type="button" className="secondary-button" onClick={() => onNavigate("/paths")}>Explore lessons</button>
+            </div>
+
+            <div className="social-proof">
+              <div>
+                <strong>4.9/5</strong>
+                <span>learner reviews</span>
+              </div>
+              <div>
+                <strong>2k+</strong>
+                <span>happy learners</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="hero-art" aria-hidden="true">
+            <svg viewBox="0 0 500 340" role="img">
+              <g>
+                <path d="M267 54c44-33 109-25 146 20 33 40 33 95 6 129-18 22-44 35-71 36l-4 38c-2 22-17 41-38 51-22 10-48 8-69-7-13-9-22-21-27-35l-33 25c-11 8-26 9-38 2-11-6-19-17-21-29l-15-3c-16-2-30-13-36-29-7-19-1-40 16-53l10-9-12-34c-9-23-6-49 12-68 20-22 53-34 83-26l6-10c10-18 29-30 50-32 11-2 23-2 34 2zm-88 107c-26 0-47 21-47 47s21 47 47 47 47-21 47-47-21-47-47-47z" fill="#f46438" opacity="0.14" />
+                <path d="M76 162c0-65 52-117 117-117h96c58 0 104 44 104 99v31c0 47-38 85-85 85h-52l-34 51c-6 9-17 14-29 12-12-2-22-10-27-21l-24-52h-66c-46 0-83-37-83-83v-5zm124-24c-13 0-24 11-24 25s11 25 24 25h56c13 0 24-11 24-25s-11-25-24-25h-56z" fill="#F6B720" />
+                <path d="M204 95c-22 0-39 18-39 40v96c0 15 12 27 27 27h27c11 0 20-9 20-20v-59l72-1c18 0 33-15 33-33s-15-33-33-33h-72v-14c0-12-10-22-22-22h-2z" fill="#0B3D7D" />
+                <path d="M311 97c17 2 32 12 42 27-8-2-15-4-22-6l-20-21zm-118 38c-13 0-23 10-23 23v86c0 13 11 23 23 23h20c15 0 27-12 27-27v-31h58c13 0 24-11 24-24 0-13-11-24-24-24h-58v-15c0-10-8-18-18-18h-20zm89 7c7-2 15-1 21 3l52 35c8 5 13 15 13 25 0 12-7 23-18 28l-45 20c-11 5-24 2-32-7-7-8-9-19-5-29l8-22-28-14c-9-4-15-14-15-24 0-8 4-16 11-20l39-19z" fill="#2A84FF" />
+                <path d="M306 102l30 26-52 25 22-51z" fill="#F6B720" />
+                <path d="M294 255c52-22 81-15 108 5 17 12 32 23 36 42-25 5-49 7-77 8-28 0-56-4-83-13 3-13 8-27 16-42z" fill="#0B3D7D" />
+                <circle cx="352" cy="118" r="33" fill="#e7f0ff" opacity="0.9" />
+                <path d="M342 118c9-9 20-14 31-14 12 0 21 5 29 12-12 3-20 11-24 22-5-7-12-13-36-20z" fill="#0B3D7D" opacity="0.16" />
+                <path d="M398 138l34 46" stroke="#0B3D7D" strokeWidth="8" strokeLinecap="round" />
+                <path d="M115 254c31 23 61 36 96 41" stroke="#f3c156" strokeWidth="12" strokeLinecap="round" fill="none" opacity="0.7" />
+                <path d="M142 226l-26 28" stroke="#f3c156" strokeWidth="12" strokeLinecap="round" fill="none" opacity="0.7" />
+                <circle cx="116" cy="282" r="10" fill="#f3c156" opacity="0.72" />
+                <circle cx="404" cy="200" r="8" fill="#f3c156" opacity="0.72" />
+                <circle cx="428" cy="66" r="7" fill="#f3c156" opacity="0.72" />
+              </g>
+            </svg>
+          </div>
+        </section>
+
+        <div className="blue-strip" aria-hidden="true" />
+
+        <section className="feature-section">
+          <p className="section-tag">Let’s grow together</p>
+          <h2>We put a place for every learner</h2>
+
+          <div className="feature-grid">
+            {featureCards.map((card) => (
+              <article key={card.title} className={`feature-card ${card.color}`}>
+                <div className="feature-icon"><Icon name={card.icon} size={29} /></div>
+                <h3>{card.title}</h3>
+                <p>{card.subtitle}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="scenario-section">
+          <div className="scenario-header">
+            <h2>Learn from Real-Life Scenario</h2>
+          </div>
+
+          <div className="scenario-grid">
+            {scenarioCards.map((card) => (
+              <article key={card.title} className={`scenario-card ${card.color}`}>
+                <div className="scenario-topline">
+                  <span className="scenario-badge">{card.badge}</span>
+                  <span className="scenario-icon"><Icon name={card.icon} size={27} /></span>
+                </div>
+                <h3>{card.title}</h3>
+                <p>{card.copy}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="cta-panel">
+          <div className="cta-copy">
+            <span className="cta-kicker">Learn sign language. Connect with confidence.</span>
+            <h3>Let’s make communication more inclusive.</h3>
+            <button type="button" className="cta-button" onClick={() => onNavigate("/practice")}>Learn with us</button>
+          </div>
+        </section>
+      </main>
+
+      <footer className="landing-footer">
+        <div className="footer-brand">
+          <span className="brand-mark small">T</span>
+          <span>Talinturo</span>
+        </div>
+        <div className="footer-meta">
+          <span>© 2026 Talinturo</span>
+          <span>Privacy</span>
+          <span>Terms</span>
+        </div>
+      </footer>
     </div>
-    <div className="dashboard-bottom">
-      <section className="panel achievements-panel"><div className="panel-heading"><div><p className="eyebrow">LOOK AT YOU GO</p><h2>Recent achievements</h2></div><button className="text-link" onClick={() => onNavigate("/progress")}>View all <span>→</span></button></div><div className="achievement-row"><div className="achievement-badge badge-sun">☀️</div><div><strong>Early bird</strong><small>Learned before 9 am</small></div><span className="achievement-new">JUST NOW</span></div><div className="achievement-row"><div className="achievement-badge badge-heart">💛</div><div><strong>Kind communicator</strong><small>Practiced 10 everyday signs</small></div><span className="achievement-date">Yesterday</span></div></section>
-      <section className="quote-card"><span>“</span><blockquote>Every sign you learn opens a little more of the world.</blockquote><small>YOUR TALINTURO REMINDER</small><div className="quote-flower">✿</div></section>
-    </div>
-  </>;
+  );
 }
 
 function StatCard({ icon, tone, label, value, change }) {
-  return <div className="stat-card"><span className={`stat-icon ${tone}`}>{icon}</span><div className="stat-copy"><small>{label}</small><strong>{value}</strong><span>{change}</span></div><span className="stat-menu">···</span></div>;
+  return <div className="stat-card"><span className={`stat-icon ${tone}`}><Icon name={icon} size={21} /></span><div className="stat-copy"><small>{label}</small><strong>{value}</strong><span>{change}</span></div><span className="stat-menu">···</span></div>;
 }
 
 function PathPreview({ icon, color, title, lessons: count, progress }) {
@@ -349,10 +496,10 @@ function LearningPaths({ onNavigate }) {
   const [filter, setFilter] = useState("All paths");
   const visibleLessons = lessons.filter((lesson) => filter === "All paths" || (filter === "In progress" && lesson.progress > 0) || (filter === "Not started" && lesson.progress === 0) || (filter === "Completed" && lesson.progress === 100));
   return <>
-    <PageTitle eyebrow="LEARN AT YOUR OWN PACE" title="Learning paths" description="A little practice each day goes a long way. Find the path that feels right for you." action={<Button onClick={() => onNavigate("/practice")}>✋ Quick practice</Button>} />
+    <PageTitle eyebrow="LEARN AT YOUR OWN PACE" title="Learning paths" description="A little practice each day goes a long way. Find the path that feels right for you." action={<Button onClick={() => onNavigate("/practice")}><Icon name="hand" size={17} /> Quick practice</Button>} />
     <div className="filter-row">{["All paths", "In progress", "Not started", "Completed"].map((item) => <button key={item} className={`filter-chip ${filter === item ? "filter-active" : ""}`} onClick={() => setFilter(item)}>{item}</button>)}</div>
-    {visibleLessons.length ? <div className="learning-path-grid">{visibleLessons.map((lesson) => <article className="path-card" key={lesson.id}><div className={`path-card-art ${lesson.color}`}><span className="path-emoji">{lesson.icon}</span><span className="path-level">{lesson.level}</span><span className="path-sparkle">✦</span></div><div className="path-card-content"><span className="eyebrow">{lesson.unit}</span><h2>{lesson.title}</h2><p>{lesson.id === "greetings" ? "Start conversations with confidence using friendly greetings and introductions." : lesson.id === "introductions" ? "Share your name, feelings, and the things that make you, you." : "Learn the useful signs you'll reach for every day."}</p><div className="path-card-meta"><span>▤ {lesson.id === "greetings" ? "4" : "6"} bite-sized lessons</span><span>⏱ {lesson.minutes} min each</span></div><div className="path-card-progress"><ProgressBar value={lesson.progress} /><span>{lesson.progress ? `${lesson.progress}%` : "Not started"}</span></div><Button variant={lesson.progress ? "primary" : "outline"} onClick={() => onNavigate("/practice")}>{lesson.progress ? "Continue path" : "Start learning"} <span>→</span></Button></div></article>)}</div> : <div className="empty-state"><span>🌱</span><h2>No paths in this group yet</h2><p>Your next learning adventure is just around the corner.</p></div>}
-    <section className="encouragement-strip"><span>🌈</span><div><strong>Learning looks different for everyone.</strong><p>Go at your own pace. There's no wrong way to make progress.</p></div><button className="text-link" onClick={() => onNavigate("/help")}>Our approach →</button></section>
+    {visibleLessons.length ? <div className="learning-path-grid">{visibleLessons.map((lesson) => <article className="path-card" key={lesson.id}><div className={`path-card-art ${lesson.color}`}><span className="path-emoji">{lesson.icon}</span><span className="path-level">{lesson.level}</span><span className="path-sparkle">✦</span></div><div className="path-card-content"><span className="eyebrow">{lesson.unit}</span><h2>{lesson.title}</h2><p>{lesson.id === "greetings" ? "Start conversations with confidence using friendly greetings and introductions." : lesson.id === "introductions" ? "Share your name, feelings, and the things that make you, you." : "Learn the useful signs you'll reach for every day."}</p><div className="path-card-meta"><span>▤ {lesson.id === "greetings" ? "4" : "6"} bite-sized lessons</span><span>⏱ {lesson.minutes} min each</span></div><div className="path-card-progress"><ProgressBar value={lesson.progress} /><span>{lesson.progress ? `${lesson.progress}%` : "Not started"}</span></div><Button variant={lesson.progress ? "primary" : "outline"} onClick={() => onNavigate("/practice")}>{lesson.progress ? "Continue path" : "Start learning"} <span>→</span></Button></div></article>)}</div> : <div className="empty-state"><Icon name="sprout" size={34} /><h2>No paths in this group yet</h2><p>Your next learning adventure is just around the corner.</p></div>}
+    <section className="encouragement-strip"><Icon name="sparkles" size={26} /><div><strong>Learning looks different for everyone.</strong><p>Go at your own pace. There's no wrong way to make progress.</p></div><button className="text-link" onClick={() => onNavigate("/help")}>Our approach →</button></section>
   </>;
 }
 
@@ -363,8 +510,8 @@ function Vocabulary() {
   const filtered = words.filter((item) => (category === "All signs" || item.category === category) && `${item.word} ${item.meaning}`.toLowerCase().includes(search.toLowerCase()));
   return <>
     <PageTitle eyebrow="A LITTLE WORD, A BIG CONNECTION" title="FSL vocabulary" description="Discover useful Filipino Sign Language signs and add your favorites to practice later." />
-    <div className="vocab-controls"><label className="search-field"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search signs..." /><kbd>⌘ K</kbd></label><div className="filter-row">{["All signs", "Greetings", "Everyday", "People"].map((item) => <button key={item} className={`filter-chip ${category === item ? "filter-active" : ""}`} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
-    {filtered.length ? <div className="vocab-grid">{filtered.map((item) => <article className="vocab-card" key={item.word}><button className={`save-sign ${saved.includes(item.word) ? "saved" : ""}`} aria-label={`${saved.includes(item.word) ? "Unsave" : "Save"} ${item.word}`} onClick={() => setSaved((current) => current.includes(item.word) ? current.filter((word) => word !== item.word) : [...current, item.word])}>{saved.includes(item.word) ? "♥" : "♡"}</button><div className="vocab-emoji">{item.emoji}</div><span className="category-tag">{item.category}</span><h2>{item.word}</h2><p>{item.meaning}</p><small>{item.hint}</small><button className="vocab-practice" onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(item.word))}>🔊 Hear the word</button></article>)}</div> : <div className="empty-state"><span>🔎</span><h2>No signs found</h2><p>Try a different search or category.</p></div>}
+    <div className="vocab-controls"><label className="search-field"><Icon name="search" size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search signs..." /><kbd>⌘ K</kbd></label><div className="filter-row">{["All signs", "Greetings", "Everyday", "People"].map((item) => <button key={item} className={`filter-chip ${category === item ? "filter-active" : ""}`} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
+    {filtered.length ? <div className="vocab-grid">{filtered.map((item) => <article className="vocab-card" key={item.word}><button className={`save-sign ${saved.includes(item.word) ? "saved" : ""}`} aria-label={`${saved.includes(item.word) ? "Unsave" : "Save"} ${item.word}`} onClick={() => setSaved((current) => current.includes(item.word) ? current.filter((word) => word !== item.word) : [...current, item.word])}>{saved.includes(item.word) ? "♥" : "♡"}</button><div className="vocab-emoji">{item.emoji}</div><span className="category-tag">{item.category}</span><h2>{item.word}</h2><p>{item.meaning}</p><small>{item.hint}</small><button className="vocab-practice" onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(item.word))}><Icon name="volume" size={16} /> Hear the word</button></article>)}</div> : <div className="empty-state"><Icon name="search" size={34} /><h2>No signs found</h2><p>Try a different search or category.</p></div>}
   </>;
 }
 
@@ -403,16 +550,16 @@ function Practice({ onToast }) {
   };
   return <>
     <PageTitle eyebrow="PRACTICE MAKES CONNECTION" title="Sign practice" description="Take a breath, get comfortable, and practice a sign at your own pace." />
-    <div className="practice-layout"><section className="camera-panel"><div className="camera-top"><div><p className="eyebrow">YOUR PRACTICE SPACE</p><h2>Ready when you are</h2></div><span className={`camera-state ${cameraOn ? "camera-live" : ""}`}><i />{cameraOn ? "Camera on" : "Camera off"}</span></div><div className={`camera-view ${cameraOn ? "camera-active" : ""}`}>{cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <><div className="camera-frame"><span /><span /><span /><span /></div><div className="camera-placeholder"><div className="camera-icon">✋</div><strong>Make yourself comfy</strong><p>Your camera preview will appear here.<br />Nothing is recorded or saved.</p><Button variant="outline" onClick={toggleCamera}>Turn on camera</Button></div></>}</div><div className="camera-controls"><Button variant={cameraOn ? "outline" : "primary"} onClick={toggleCamera}>{cameraOn ? "Turn camera off" : "Enable camera"} <span>⌕</span></Button><span>🔒 Your video stays on your device</span></div></section><aside className="sign-guide panel"><p className="eyebrow">TODAY'S SIGN</p><h2>“{selected}”</h2><p className="guide-meaning">{selected === "Salamat" ? "Thank you" : selected === "Kumusta" ? "Hello / How are you?" : "Goodbye"} <span>·</span> Filipino</p><div className="hand-guide"><span>✋</span><div className="guide-play">▶</div></div><h3>Try it step by step</h3><ol><li><span>1</span> Relax your shoulders and take a breath.</li><li><span>2</span> Watch a trusted FSL demonstration of the sign.</li><li><span>3</span> Try it slowly in your own practice space.</li></ol><div className="guide-note"><span>💡</span><p>Signs can vary by region and community. Learn from Deaf FSL signers whenever you can.</p></div><label className="select-label">Choose another sign<select value={selected} onChange={(event) => { setSelected(event.target.value); setChecked(false); }}><option>Salamat</option><option>Kumusta</option><option>Paalam</option></select></label></aside></div><section className="practice-check"><div><span className="check-star">✦</span><div><strong>How did that feel?</strong><small>Take a moment to reflect. Every try counts!</small></div></div><div><Button variant={checked ? "outline" : "primary"} onClick={markPractice}>{checked ? "✓ Practice noted" : "I practiced this sign"}</Button></div></section>
+    <div className="practice-layout"><section className="camera-panel"><div className="camera-top"><div><p className="eyebrow">YOUR PRACTICE SPACE</p><h2>Ready when you are</h2></div><span className={`camera-state ${cameraOn ? "camera-live" : ""}`}><i />{cameraOn ? "Camera on" : "Camera off"}</span></div><div className={`camera-view ${cameraOn ? "camera-active" : ""}`}>{cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <><div className="camera-frame"><span /><span /><span /><span /></div><div className="camera-placeholder"><div className="camera-icon"><Icon name="camera" size={28} /></div><strong>Make yourself comfy</strong><p>Your camera preview will appear here.<br />Nothing is recorded or saved.</p><Button variant="outline" onClick={toggleCamera}>Turn on camera</Button></div></>}</div><div className="camera-controls"><Button variant={cameraOn ? "outline" : "primary"} onClick={toggleCamera}>{cameraOn ? "Turn camera off" : "Enable camera"} <span>⌕</span></Button><span><Icon name="shield" size={15} /> Your video stays on your device</span></div></section><aside className="sign-guide panel"><p className="eyebrow">TODAY'S SIGN</p><h2>“{selected}”</h2><p className="guide-meaning">{selected === "Salamat" ? "Thank you" : selected === "Kumusta" ? "Hello / How are you?" : "Goodbye"} <span>·</span> Filipino</p><div className="hand-guide"><span>✋</span><div className="guide-play">▶</div></div><h3>Try it step by step</h3><ol><li><span>1</span> Relax your shoulders and take a breath.</li><li><span>2</span> Watch a trusted FSL demonstration of the sign.</li><li><span>3</span> Try it slowly in your own practice space.</li></ol><div className="guide-note"><Icon name="lightbulb" size={18} /><p>Signs can vary by region and community. Learn from Deaf FSL signers whenever you can.</p></div><label className="select-label">Choose another sign<select value={selected} onChange={(event) => { setSelected(event.target.value); setChecked(false); }}><option>Salamat</option><option>Kumusta</option><option>Paalam</option></select></label></aside></div><section className="practice-check"><div><span className="check-star">✦</span><div><strong>How did that feel?</strong><small>Take a moment to reflect. Every try counts!</small></div></div><div><Button variant={checked ? "outline" : "primary"} onClick={markPractice}>{checked ? "✓ Practice noted" : "I practiced this sign"}</Button></div></section>
   </>;
 }
 
 function Scenarios({ onNavigate }) {
   return <>
     <PageTitle eyebrow="LEARN BY LIVING IT" title="Choose a scenario" description="Practice useful signs in everyday moments. Pick a story and see where the conversation takes you." />
-    <div className="scenario-banner"><span>💬</span><div><strong>Real moments, real connection</strong><p>Each scenario is a safe space to try, make mistakes, and grow your confidence.</p></div><span className="scenario-count">3 stories <b>·</b> 5–10 min each</span></div>
+    <div className="scenario-banner"><Icon name="message" size={25} /><div><strong>Real moments, real connection</strong><p>Each scenario is a safe space to try, make mistakes, and grow your confidence.</p></div><span className="scenario-count">3 stories <b>·</b> 5–10 min each</span></div>
     <div className="scenario-grid">{scenarios.map((scenario) => <article className="scenario-card" key={scenario.title}><div className={`scenario-art ${scenario.color}`}><span>{scenario.emoji}</span><small>{scenario.tag}</small></div><div className="scenario-content"><span className="eyebrow">{scenario.tag.toUpperCase()} SCENARIO</span><h2>{scenario.title}</h2><p>{scenario.description}</p><div className="scenario-bottom"><span>⏱ 5–10 min <i>·</i> Beginner friendly</span><Button variant="outline" onClick={() => onNavigate("/activity")}>Start story <span>→</span></Button></div></div></article>)}</div>
-    <div className="gentle-note"><span>🌱</span><span>There's no pressure to get it perfect. This is your space to explore.</span></div>
+    <div className="gentle-note"><Icon name="sprout" size={23} /><span>There's no pressure to get it perfect. This is your space to explore.</span></div>
   </>;
 }
 
@@ -431,11 +578,11 @@ function ScenarioActivity({ onNavigate, onToast }) {
       }
     } else onNavigate("/results");
   };
-  return <><div className="activity-top"><button className="back-link" onClick={() => onNavigate("/scenarios")}>← All scenarios</button><span>STORY 1 OF 3</span><span>1 / 3</span></div><div className="activity-progress"><ProgressBar value={34} /></div><section className="activity-card panel"><div className="activity-art peach">🏪<span>✦</span></div><span className="eyebrow">AT THE SARI-SARI STORE</span><h1>A friendly hello</h1><p className="activity-prompt">You walk into your neighborhood store. The shopkeeper smiles and waves. How would you greet them?</p><div className="choice-grid">{options.map((option) => <button className={`choice-card ${answer === option ? "choice-selected" : ""} ${submitted && option === "Kumusta" ? "choice-correct" : ""}`} key={option} onClick={() => !submitted && setAnswer(option)}><span className="choice-emoji">{option === "Kumusta" ? "👋" : option === "Salamat" ? "💛" : "🌤️"}</span><span><strong>{option}</strong><small>{option === "Kumusta" ? "Hello / How are you?" : option === "Salamat" ? "Thank you" : "Goodbye"}</small></span><span className="choice-radio">{submitted && option === "Kumusta" ? "✓" : ""}</span></button>)}</div>{submitted && <div className="answer-feedback"><span>🌟</span><div><strong>Lovely choice!</strong><p>“Kumusta” is a friendly way to start a conversation. Nice work!</p></div></div>}<div className="activity-actions"><button className="text-link" onClick={() => onToast("Hint: think of a friendly greeting to start your conversation.")}>Need a hint?</button><Button onClick={submit}>{submitted ? "Continue story" : "Check my answer"} <span>→</span></Button></div></section></>;
+  return <><div className="activity-top"><button className="back-link" onClick={() => onNavigate("/scenarios")}>← All scenarios</button><span>STORY 1 OF 3</span><span>1 / 3</span></div><div className="activity-progress"><ProgressBar value={34} /></div><section className="activity-card panel"><div className="activity-art peach"><Icon name="store" size={40} /><span>✦</span></div><span className="eyebrow">AT THE SARI-SARI STORE</span><h1>A friendly hello</h1><p className="activity-prompt">You walk into your neighborhood store. The shopkeeper smiles and waves. How would you greet them?</p><div className="choice-grid">{options.map((option) => <button className={`choice-card ${answer === option ? "choice-selected" : ""} ${submitted && option === "Kumusta" ? "choice-correct" : ""}`} key={option} onClick={() => !submitted && setAnswer(option)}><span className="choice-emoji">{option === "Kumusta" ? "👋" : option === "Salamat" ? "💛" : "🌤️"}</span><span><strong>{option}</strong><small>{option === "Kumusta" ? "Hello / How are you?" : option === "Salamat" ? "Thank you" : "Goodbye"}</small></span><span className="choice-radio">{submitted && option === "Kumusta" ? "✓" : ""}</span></button>)}</div>{submitted && <div className="answer-feedback"><Icon name="star" size={21} /><div><strong>Lovely choice!</strong><p>“Kumusta” is a friendly way to start a conversation. Nice work!</p></div></div>}<div className="activity-actions"><button className="text-link" onClick={() => onToast("Hint: think of a friendly greeting to start your conversation.")}>Need a hint?</button><Button onClick={submit}>{submitted ? "Continue story" : "Check my answer"} <span>→</span></Button></div></section></>;
 }
 
 function ActivityResults({ onNavigate }) {
-  return <section className="result-card panel"><div className="result-confetti">✦　✿　✦</div><span className="result-icon">🌟</span><p className="eyebrow">SCENARIO COMPLETE</p><h1>You made a connection!</h1><p>Every conversation starts somewhere. You showed up and gave it a try — that's something to be proud of.</p><div className="result-stats"><div><strong>3/3</strong><small>moments explored</small></div><div><strong>+25</strong><small>kindness points</small></div><div><strong>1</strong><small>new sign practiced</small></div></div><div className="result-actions"><Button onClick={() => onNavigate("/scenarios")}>Choose another story <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/progress")}>See my progress</button></div></section>;
+  return <section className="result-card panel"><div className="result-confetti"><Icon name="sparkles" size={22} /></div><span className="result-icon"><Icon name="star" size={34} /></span><p className="eyebrow">SCENARIO COMPLETE</p><h1>You made a connection!</h1><p>Every conversation starts somewhere. You showed up and gave it a try — that's something to be proud of.</p><div className="result-stats"><div><strong>3/3</strong><small>moments explored</small></div><div><strong>+25</strong><small>kindness points</small></div><div><strong>1</strong><small>new sign practiced</small></div></div><div className="result-actions"><Button onClick={() => onNavigate("/scenarios")}>Choose another story <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/progress")}>See my progress</button></div></section>;
 }
 
 function Challenge({ onNavigate, onToast }) {
@@ -446,7 +593,7 @@ function Challenge({ onNavigate, onToast }) {
 }
 
 function ChallengeFeedback({ success = false, onNavigate }) {
-  return <section className={`feedback-card panel ${success ? "feedback-success" : "feedback-retry"}`}><span className="feedback-icon">{success ? "🏆" : "🌱"}</span><p className="eyebrow">{success ? "A NEW LEVEL IS YOURS" : "EVERY TRY IS PROGRESS"}</p><h1>{success ? "You're a Trailblazer!" : "You're learning as you go."}</h1><p>{success ? "You made it through the challenge. Keep exploring, keep connecting, and keep being you." : "Some signs take a little more practice. That's completely okay. Take a breath and give it another go when you're ready."}</p>{success && <div className="unlocked-level"><span>✦</span><div><small>NEW LEVEL UNLOCKED</small><strong>Trailblazer</strong></div><span>🌟</span></div>}<div className="result-actions"><Button onClick={() => onNavigate(success ? "/paths" : "/challenge")}>{success ? "Explore new lessons" : "Try the challenge again"} <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/")}>Back to my dashboard</button></div></section>;
+  return <section className={`feedback-card panel ${success ? "feedback-success" : "feedback-retry"}`}><span className="feedback-icon"><Icon name={success ? "star" : "sprout"} size={34} /></span><p className="eyebrow">{success ? "A NEW LEVEL IS YOURS" : "EVERY TRY IS PROGRESS"}</p><h1>{success ? "You're a Trailblazer!" : "You're learning as you go."}</h1><p>{success ? "You made it through the challenge. Keep exploring, keep connecting, and keep being you." : "Some signs take a little more practice. That's completely okay. Take a breath and give it another go when you're ready."}</p>{success && <div className="unlocked-level"><span>✦</span><div><small>NEW LEVEL UNLOCKED</small><strong>Trailblazer</strong></div><Icon name="star" size={19} /></div>}<div className="result-actions"><Button onClick={() => onNavigate(success ? "/paths" : "/challenge")}>{success ? "Explore new lessons" : "Try the challenge again"} <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/")}>Back to my dashboard</button></div></section>;
 }
 
 function Progress() {
@@ -458,15 +605,74 @@ function Progress() {
       .then(([dashboardData, progressData]) => { setSummary(dashboardData); setEvents(progressData.events); })
       .catch((error) => setLoadError(error.message));
   }, []);
-  return <><PageTitle eyebrow="LOOK HOW FAR YOU'VE COME" title="My progress" description="Every practice session counts. Here's a little snapshot of your learning journey." action={<Button variant="outline" onClick={() => window.print()}>↓ Save my progress</Button>} />{loadError && <p className="inline-error">Could not refresh your progress: {loadError}</p>}<div className="progress-overview"><StatCard icon="🌱" tone="mint" label="Current level" value="Explorer" change="2 of 4 levels" /><StatCard icon="📖" tone="lavender" label="Lessons done" value={`${summary?.lessons_completed ?? 12} / 28`} change="Keep it up!" /><StatCard icon="🔥" tone="yellow" label="Best streak" value="9 days" change="Current: 6 days" /><StatCard icon="🌟" tone="peach" label="Practice activities" value={summary ? events.length : 3} change="Saved to your profile" /></div><div className="progress-content-grid"><section className="panel progress-chart-panel"><div className="panel-heading"><div><p className="eyebrow">SHOWING UP IS EVERYTHING</p><h2>Your learning rhythm</h2></div><select className="select-compact" aria-label="Chart period"><option>This week</option><option>This month</option></select></div><div className="large-chart">{[30,60,45,90,52,75,22].map((value,index)=><div key={index}><span className="large-chart-bar" style={{height:`${value}%`}}/><small>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</small></div>)}</div><p className="chart-caption">You've practiced on 4 days this week. Just one more to reach your goal! ✨</p></section><section className="panel level-panel"><p className="eyebrow">YOUR LEARNING PATH</p><h2>Growing at your pace</h2><div className="level-steps"><div className="level-step complete"><span>✓</span><div><strong>Seedling</strong><small>Completed · 120 points</small></div></div><div className="level-step current"><span>✦</span><div><strong>Explorer</strong><small>340 / 400 points</small><ProgressBar value={85} /></div></div><div className="level-step"><span>3</span><div><strong>Trailblazer</strong><small>Unlock at 400 points</small></div></div><div className="level-step"><span>4</span><div><strong>Community star</strong><small>There's more to discover</small></div></div></div></section></div><section className="panel achievement-list"><div className="panel-heading"><div><p className="eyebrow">MILESTONES TO CELEBRATE</p><h2>Your badges</h2></div><span className="soft-tag">3 earned</span></div><div className="badge-list"><div><span>🌅</span><strong>Early bird</strong><small>Learned before 9 am</small></div><div><span>🔥</span><strong>On a roll</strong><small>Practiced 5 days in a row</small></div><div><span>💛</span><strong>Kind communicator</strong><small>Learned 10 everyday signs</small></div><div className="badge-locked"><span>🦋</span><strong>Sign explorer</strong><small>Learn 20 new signs</small></div></div></section></>;
+  return <>
+    <PageTitle eyebrow="LOOK HOW FAR YOU'VE COME" title="My progress" description="Every practice session counts. Here's a little snapshot of your learning journey." action={<Button variant="outline" onClick={() => window.print()}>↓ Save my progress</Button>} />
+    {loadError && <p className="inline-error">Could not refresh your progress: {loadError}</p>}
+    <div className="progress-overview">
+      <StatCard icon="sprout" tone="mint" label="Current level" value="Explorer" change="2 of 4 levels" />
+      <StatCard icon="bookOpen" tone="lavender" label="Lessons done" value={`${summary?.lessons_completed ?? 12} / 28`} change="Keep it up!" />
+      <StatCard icon="flame" tone="yellow" label="Best streak" value="9 days" change="Current: 6 days" />
+      <StatCard icon="star" tone="peach" label="Practice activities" value={summary ? events.length : 3} change="Saved to your profile" />
+    </div>
+    <div className="progress-content-grid">
+      <section className="panel progress-chart-panel">
+        <div className="panel-heading"><div><p className="eyebrow">SHOWING UP IS EVERYTHING</p><h2>Your learning rhythm</h2></div><select className="select-compact" aria-label="Chart period"><option>This week</option><option>This month</option></select></div>
+        <div className="large-chart">{[30,60,45,90,52,75,22].map((value,index)=><div key={index}><span className="large-chart-bar" style={{height:`${value}%`}}/><small>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</small></div>)}</div>
+        <p className="chart-caption">You've practiced on 4 days this week. Just one more to reach your goal! <Icon name="sparkles" size={16} /></p>
+      </section>
+      <section className="panel level-panel">
+        <p className="eyebrow">YOUR LEARNING PATH</p><h2>Growing at your pace</h2>
+        <div className="level-steps">
+          <div className="level-step complete"><span>✓</span><div><strong>Seedling</strong><small>Completed · 120 points</small></div></div>
+          <div className="level-step current"><span>✦</span><div><strong>Explorer</strong><small>340 / 400 points</small><ProgressBar value={85} /></div></div>
+          <div className="level-step"><span>3</span><div><strong>Trailblazer</strong><small>Unlock at 400 points</small></div></div>
+          <div className="level-step"><span>4</span><div><strong>Community star</strong><small>There's more to discover</small></div></div>
+        </div>
+      </section>
+    </div>
+    <section className="panel achievement-list">
+      <div className="panel-heading"><div><p className="eyebrow">MILESTONES TO CELEBRATE</p><h2>Your badges</h2></div><span className="soft-tag">3 earned</span></div>
+      <div className="badge-list">
+        <div><Icon name="sun" size={22} /><strong>Early bird</strong><small>Learned before 9 am</small></div>
+        <div><Icon name="flame" size={22} /><strong>On a roll</strong><small>Practiced 5 days in a row</small></div>
+        <div><Icon name="heart" size={22} /><strong>Kind communicator</strong><small>Learned 10 everyday signs</small></div>
+        <div className="badge-locked"><Icon name="globe" size={22} /><strong>Sign explorer</strong><small>Learn 20 new signs</small></div>
+      </div>
+    </section>
+  </>;
 }
 
 function InstructorDashboard({ onNavigate }) {
-  return <><PageTitle eyebrow="YOUR CLASSROOM, AT A GLANCE" title="Good morning, Jamie! ☀️" description="A little encouragement goes a long way. Here's how your learners are doing this week." action={<Button onClick={() => onNavigate("/classrooms/create")}>＋ New classroom</Button>} /><div className="stats-grid instructor-stats"><StatCard icon="♧" tone="lavender" label="Active learners" value="24" change="+3 this month" /><StatCard icon="📚" tone="mint" label="Lessons completed" value="186" change="+12 this week" /><StatCard icon="✋" tone="peach" label="Signs practiced" value="842" change="Across all learners" /><StatCard icon="🌟" tone="yellow" label="Class engagement" value="87%" change="↑ 8% from last week" /></div><div className="instructor-grid"><section className="panel"><div className="panel-heading"><div><p className="eyebrow">YOUR PEOPLE</p><h2>Learner snapshots</h2></div><button className="text-link" onClick={() => onNavigate("/learners")}>All learners →</button></div><LearnerTable rows={learners.slice(0, 3)} onNavigate={onNavigate} /></section><section className="panel classroom-summary"><div className="panel-heading"><div><p className="eyebrow">LEARN TOGETHER</p><h2>Virtual classrooms</h2></div></div><div className="classroom-feature"><span>🏡</span><div><strong>Sunshine Sign Stars</strong><small>12 learners · created Sep 8</small></div><span className="room-status">ACTIVE</span></div><div className="classroom-feature"><span>🌈</span><div><strong>Little Language Club</strong><small>8 learners · created Aug 22</small></div><span className="room-status">ACTIVE</span></div><Button variant="outline" className="full-button" onClick={() => onNavigate("/classrooms")}>Manage classrooms <span>→</span></Button></section><section className="panel instructor-activity"><div className="panel-heading"><div><p className="eyebrow">YOUR CLASS AT A GLANCE</p><h2>Weekly activity</h2></div><select className="select-compact" aria-label="Activity time period"><option>This week</option><option>This month</option></select></div><div className="large-chart">{[48,65,41,90,58,77,32].map((value,index)=><div key={index}><span className="large-chart-bar" style={{height:`${value}%`}}/><small>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</small></div>)}</div></section><section className="tip-card"><span>💡</span><p className="eyebrow">A GENTLE REMINDER</p><h2>Celebrate the effort, not just the answer.</h2><p>Every attempt is a brave step toward better communication. Your encouragement matters.</p><button className="text-link" onClick={() => onNavigate("/help")}>More teaching tips →</button></section></div></>;
+  return <>
+    <PageTitle eyebrow="YOUR CLASSROOM, AT A GLANCE" title={<>Good morning, Jamie! <Icon name="sun" size={22} /></>} description="A little encouragement goes a long way. Here's how your learners are doing this week." action={<Button onClick={() => onNavigate("/classrooms/create")}>＋ New classroom</Button>} />
+    <div className="stats-grid instructor-stats">
+      <StatCard icon="users" tone="lavender" label="Active learners" value="24" change="+3 this month" />
+      <StatCard icon="bookOpen" tone="mint" label="Lessons completed" value="186" change="+12 this week" />
+      <StatCard icon="hand" tone="peach" label="Signs practiced" value="842" change="Across all learners" />
+      <StatCard icon="star" tone="yellow" label="Class engagement" value="87%" change="↑ 8% from last week" />
+    </div>
+    <div className="instructor-grid">
+      <section className="panel">
+        <div className="panel-heading"><div><p className="eyebrow">YOUR PEOPLE</p><h2>Learner snapshots</h2></div><button className="text-link" onClick={() => onNavigate("/learners")}>All learners →</button></div>
+        <LearnerTable rows={learners.slice(0, 3)} onNavigate={onNavigate} />
+      </section>
+      <section className="panel classroom-summary">
+        <div className="panel-heading"><div><p className="eyebrow">LEARN TOGETHER</p><h2>Virtual classrooms</h2></div></div>
+        <div className="classroom-feature"><Icon name="home" size={21} /><div><strong>Sunshine Sign Stars</strong><small>12 learners · created Sep 8</small></div><span className="room-status">ACTIVE</span></div>
+        <div className="classroom-feature"><Icon name="school" size={21} /><div><strong>Little Language Club</strong><small>8 learners · created Aug 22</small></div><span className="room-status">ACTIVE</span></div>
+        <Button variant="outline" className="full-button" onClick={() => onNavigate("/classrooms")}>Manage classrooms <span>→</span></Button>
+      </section>
+      <section className="panel instructor-activity">
+        <div className="panel-heading"><div><p className="eyebrow">YOUR CLASS AT A GLANCE</p><h2>Weekly activity</h2></div><select className="select-compact" aria-label="Activity time period"><option>This week</option><option>This month</option></select></div>
+        <div className="large-chart">{[48,65,41,90,58,77,32].map((value,index)=><div key={index}><span className="large-chart-bar" style={{height:`${value}%`}}/><small>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</small></div>)}</div>
+      </section>
+      <section className="tip-card"><Icon name="lightbulb" size={25} /><p className="eyebrow">A GENTLE REMINDER</p><h2>Celebrate the effort, not just the answer.</h2><p>Every attempt is a brave step toward better communication. Your encouragement matters.</p><button className="text-link" onClick={() => onNavigate("/help")}>More teaching tips →</button></section>
+    </div>
+  </>;
 }
 
 function LearnerTable({ rows, onNavigate }) {
-  return <div className="table-scroll"><table className="data-table"><thead><tr><th>LEARNER</th><th>LEVEL</th><th>LESSONS</th><th>ACCURACY</th><th>STREAK</th><th /></tr></thead><tbody>{rows.map((learner) => <tr key={learner.id}><td><button className="learner-name" onClick={() => onNavigate(`/learners/${learner.id}`)}><span className={`avatar avatar-${learner.color}`}>{learner.initials}</span><span><strong>{learner.name}</strong><small>Last active today</small></span></button></td><td><span className="soft-tag">{learner.level}</span></td><td>{learner.lessons}</td><td><div className="table-progress">{learner.accuracy}%<ProgressBar value={learner.accuracy} /></div></td><td>🔥 {learner.streak} days</td><td><button className="more-button" onClick={() => onNavigate(`/learners/${learner.id}`)} aria-label={`View ${learner.name}`}>···</button></td></tr>)}</tbody></table></div>;
+  return <div className="table-scroll"><table className="data-table"><thead><tr><th>LEARNER</th><th>LEVEL</th><th>LESSONS</th><th>ACCURACY</th><th>STREAK</th><th /></tr></thead><tbody>{rows.map((learner) => <tr key={learner.id}><td><button className="learner-name" onClick={() => onNavigate(`/learners/${learner.id}`)}><span className={`avatar avatar-${learner.color}`}>{learner.initials}</span><span><strong>{learner.name}</strong><small>Last active today</small></span></button></td><td><span className="soft-tag">{learner.level}</span></td><td>{learner.lessons}</td><td><div className="table-progress">{learner.accuracy}%<ProgressBar value={learner.accuracy} /></div></td><td className="streak-cell"><Icon name="flame" size={16} /> {learner.streak} days</td><td><button className="more-button" onClick={() => onNavigate(`/learners/${learner.id}`)} aria-label={`View ${learner.name}`}>···</button></td></tr>)}</tbody></table></div>;
 }
 
 function LearnerManagement({ onNavigate }) {
@@ -477,14 +683,14 @@ function LearnerManagement({ onNavigate }) {
     api("/instructor/learners").then((result) => setRoster(result.learners)).catch((error) => setLoadError(error.message));
   }, []);
   const filtered = roster.filter((learner) => learner.name.toLowerCase().includes(search.toLowerCase()));
-  return <>  <PageTitle eyebrow="HELP EVERY LEARNER SHINE" title="Learner management" description="Get to know your learners' progress, celebrate their wins, and find where they might need a hand." action={<Button onClick={() => onNavigate("/classrooms")}>＋ Add learners</Button>} /><section className="panel learner-management-panel"><div className="panel-heading"><div><p className="eyebrow">YOUR LEARNERS</p><h2>{roster.length} learners</h2></div><label className="search-field compact-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a learner" /></label></div>{loadError && <p className="inline-error">Could not load learners: {loadError}</p>}<LearnerTable rows={filtered} onNavigate={onNavigate} />{filtered.length === 0 && <div className="empty-table">No learners match that name yet.</div>}<div className="table-footer"><span>Showing {filtered.length} of {roster.length} learners</span><div><button disabled>← Previous</button><button className="page-number">1</button><button>2</button><button>3</button><button>Next →</button></div></div></section><div className="gentle-note"><span>💛</span><span>Learner information is private to your classroom. Please handle it with care.</span></div></>;
+  return <>  <PageTitle eyebrow="HELP EVERY LEARNER SHINE" title="Learner management" description="Get to know your learners' progress, celebrate their wins, and find where they might need a hand." action={<Button onClick={() => onNavigate("/classrooms")}>＋ Add learners</Button>} /><section className="panel learner-management-panel"><div className="panel-heading"><div><p className="eyebrow">YOUR LEARNERS</p><h2>{roster.length} learners</h2></div><label className="search-field compact-search"><Icon name="search" size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a learner" /></label></div>{loadError && <p className="inline-error">Could not load learners: {loadError}</p>}<LearnerTable rows={filtered} onNavigate={onNavigate} />{filtered.length === 0 && <div className="empty-table">No learners match that name yet.</div>}<div className="table-footer"><span>Showing {filtered.length} of {roster.length} learners</span><div><button disabled>← Previous</button><button className="page-number">1</button><button>2</button><button>3</button><button>Next →</button></div></div></section><div className="gentle-note"><Icon name="heart" size={18} /><span>Learner information is private to your classroom. Please handle it with care.</span></div></>;
 }
 
 function LearnerDetails() {
   const { id } = useParams();
   const learnerId = Number(id);
   const learner = learners.find((person) => person.id === learnerId) || learners[0];
-  return <><PageTitle eyebrow="LEARNER PROFILE" title={learner.name} description={`A closer look at ${learner.name.split(" ")[0]}'s learning journey.`} action={<span className="soft-tag">● Active today</span>} /><div className="learner-detail-hero panel"><span className={`avatar avatar-large avatar-${learner.color}`}>{learner.initials}</span><div><h2>{learner.name}</h2><p>Age {learner.age} · {learner.level} level · Sunshine Sign Stars</p></div><Button variant="outline" onClick={() => window.print()}>↓ Export summary</Button></div><div className="stats-grid"><StatCard icon="📚" tone="lavender" label="Lessons completed" value={learner.lessons} change="Since joining" /><StatCard icon="✋" tone="peach" label="Sign accuracy" value={`${learner.accuracy}%`} change="Across recent practice" /><StatCard icon="🔥" tone="yellow" label="Current streak" value={`${learner.streak} days`} change="Best: 9 days" /><StatCard icon="🌱" tone="mint" label="Current level" value={learner.level} change="Making steady progress" /></div><div className="progress-content-grid"><section className="panel"><p className="eyebrow">GROWING EVERY WEEK</p><h2>Recent activity</h2><div className="timeline"><div><i className="timeline-dot mint" /><span><strong>Completed “Greetings & introductions”</strong><small>Today · 8 min · 92% practice confidence</small></span></div><div><i className="timeline-dot peach" /><span><strong>Practiced 6 new vocabulary signs</strong><small>Yesterday · FSL Foundations</small></span></div><div><i className="timeline-dot lavender" /><span><strong>Earned the “Early bird” badge</strong><small>Monday · 8:42 am</small></span></div></div></section><section className="panel"><p className="eyebrow">A LITTLE ENCOURAGEMENT</p><h2>Strengths & next steps</h2><div className="insight-row"><span>🌟</span><div><strong>Strong with greetings</strong><small>Consistent practice and growing confidence.</small></div></div><div className="insight-row"><span>🌱</span><div><strong>Ready for everyday signs</strong><small>Try the next vocabulary set together.</small></div></div><Button variant="outline" className="full-button">Send a kind note</Button></section></div></>;
+  return <><PageTitle eyebrow="LEARNER PROFILE" title={learner.name} description={`A closer look at ${learner.name.split(" ")[0]}'s learning journey.`} action={<span className="soft-tag">● Active today</span>} /><div className="learner-detail-hero panel"><span className={`avatar avatar-large avatar-${learner.color}`}>{learner.initials}</span><div><h2>{learner.name}</h2><p>Age {learner.age} · {learner.level} level · Sunshine Sign Stars</p></div><Button variant="outline" onClick={() => window.print()}>↓ Export summary</Button></div><div className="stats-grid"><StatCard icon="bookOpen" tone="lavender" label="Lessons completed" value={learner.lessons} change="Since joining" /><StatCard icon="hand" tone="peach" label="Sign accuracy" value={`${learner.accuracy}%`} change="Across recent practice" /><StatCard icon="flame" tone="yellow" label="Current streak" value={`${learner.streak} days`} change="Best: 9 days" /><StatCard icon="sprout" tone="mint" label="Current level" value={learner.level} change="Making steady progress" /></div><div className="progress-content-grid"><section className="panel"><p className="eyebrow">GROWING EVERY WEEK</p><h2>Recent activity</h2><div className="timeline"><div><i className="timeline-dot mint" /><span><strong>Completed “Greetings & introductions”</strong><small>Today · 8 min · 92% practice confidence</small></span></div><div><i className="timeline-dot peach" /><span><strong>Practiced 6 new vocabulary signs</strong><small>Yesterday · FSL Foundations</small></span></div><div><i className="timeline-dot lavender" /><span><strong>Earned the “Early bird” badge</strong><small>Monday · 8:42 am</small></span></div></div></section><section className="panel"><p className="eyebrow">A LITTLE ENCOURAGEMENT</p><h2>Strengths & next steps</h2><div className="insight-row"><Icon name="star" size={20} /><div><strong>Strong with greetings</strong><small>Consistent practice and growing confidence.</small></div></div><div className="insight-row"><Icon name="sprout" size={20} /><div><strong>Ready for everyday signs</strong><small>Try the next vocabulary set together.</small></div></div><Button variant="outline" className="full-button">Send a kind note</Button></section></div></>;
 }
 
 function Classrooms({ onNavigate }) {
@@ -499,7 +705,7 @@ function Classrooms({ onNavigate }) {
     <div className="classroom-list">
       {classrooms.map((classroom, index) => (
         <article className="classroom-card panel" key={classroom.code}>
-          <div className={`classroom-icon ${index % 2 === 0 ? "mint" : "lavender"}`}>{index % 2 === 0 ? "🏡" : "🌈"}</div>
+          <div className={`classroom-icon ${index % 2 === 0 ? "mint" : "lavender"}`}><Icon name={index % 2 === 0 ? "home" : "school"} size={27} /></div>
           <div className="classroom-details">
             <span className="room-status">ACTIVE CLASSROOM</span>
             <h2>{classroom.name}</h2>
@@ -513,8 +719,8 @@ function Classrooms({ onNavigate }) {
         </article>
       ))}
     </div>
-    {classrooms.length === 0 && !loadError && <div className="empty-state"><span>🏡</span><h2>No classrooms yet</h2><p>Create a classroom to invite learners into your space.</p></div>}
-    <section className="invite-panel"><div><span>✉️</span><h2>Invite learners into your classroom</h2><p>Share your classroom code with families. Learners can join when they're ready.</p></div><Button variant="outline" onClick={() => onNavigate("/classrooms/create")}>Create a classroom</Button></section>
+    {classrooms.length === 0 && !loadError && <div className="empty-state"><Icon name="home" size={34} /><h2>No classrooms yet</h2><p>Create a classroom to invite learners into your space.</p></div>}
+    <section className="invite-panel"><div><Icon name="mail" size={24} /><h2>Invite learners into your classroom</h2><p>Share your classroom code with families. Learners can join when they're ready.</p></div><Button variant="outline" onClick={() => onNavigate("/classrooms/create")}>Create a classroom</Button></section>
   </>;
 }
 
@@ -547,7 +753,7 @@ function AddStudents({ onNavigate, onToast }) {
       setLoading(false);
     }
   };
-  return <><PageTitle eyebrow="GROW YOUR LEARNING COMMUNITY" title="Add students" description="Invite a learner to this classroom. Their contact details stay within your local demo." action={<Button variant="outline" onClick={() => onNavigate("/classrooms")}>← Classrooms</Button>} /><section className="classroom-detail-banner panel"><span>🏡</span><div><small>CLASSROOM</small><h2>{classroom?.name || "Your classroom"}</h2><p>Class code <strong>{classroom?.code || "…"}</strong></p></div></section><div className="students-layout"><form className="form-panel panel" onSubmit={submit}><p className="eyebrow">PERSONAL INVITE</p><h2>Add a learner</h2><p className="form-description">Add a name and email address to your classroom roster.</p><label>Learner name<input required maxLength={70} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Sam Rivera" /></label><label>Family or learner email<input required type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><div className="form-actions"><Button type="submit" disabled={loading}>{loading ? "Adding…" : "Add to classroom"} <span>→</span></Button></div></form><section className="panel roster-panel"><div className="panel-heading"><div><p className="eyebrow">LEARNING TOGETHER</p><h2>{students.length} learner{students.length === 1 ? "" : "s"}</h2></div><span className="soft-tag">PRIVATE ROSTER</span></div>{loadError && <p className="inline-error">Could not load roster: {loadError}</p>}{students.length ? students.map((student) => <div className="roster-row" key={student.id}><span className="avatar avatar-mint">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span><strong>{student.name}</strong><small>{student.email}</small></span><span className="room-status">INVITED</span></div>) : <div className="empty-state"><span>🌱</span><h2>A new beginning</h2><p>Your learners will appear here once added.</p></div>}</section></div></>;
+  return <><PageTitle eyebrow="GROW YOUR LEARNING COMMUNITY" title="Add students" description="Invite a learner to this classroom. Their contact details stay within your local demo." action={<Button variant="outline" onClick={() => onNavigate("/classrooms")}>← Classrooms</Button>} /><section className="classroom-detail-banner panel"><Icon name="home" size={27} /><div><small>CLASSROOM</small><h2>{classroom?.name || "Your classroom"}</h2><p>Class code <strong>{classroom?.code || "…"}</strong></p></div></section><div className="students-layout"><form className="form-panel panel" onSubmit={submit}><p className="eyebrow">PERSONAL INVITE</p><h2>Add a learner</h2><p className="form-description">Add a name and email address to your classroom roster.</p><label>Learner name<input required maxLength={70} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Sam Rivera" /></label><label>Family or learner email<input required type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><div className="form-actions"><Button type="submit" disabled={loading}>{loading ? "Adding…" : "Add to classroom"} <span>→</span></Button></div></form><section className="panel roster-panel"><div className="panel-heading"><div><p className="eyebrow">LEARNING TOGETHER</p><h2>{students.length} learner{students.length === 1 ? "" : "s"}</h2></div><span className="soft-tag">PRIVATE ROSTER</span></div>{loadError && <p className="inline-error">Could not load roster: {loadError}</p>}{students.length ? students.map((student) => <div className="roster-row" key={student.id}><span className="avatar avatar-mint">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span><strong>{student.name}</strong><small>{student.email}</small></span><span className="room-status">INVITED</span></div>) : <div className="empty-state"><Icon name="sprout" size={34} /><h2>A new beginning</h2><p>Your learners will appear here once added.</p></div>}</section></div></>;
 }
 
 function CreateClassroom({ onNavigate, onToast }) {
@@ -568,7 +774,7 @@ function CreateClassroom({ onNavigate, onToast }) {
       setSubmitting(false);
     }
   };
-  return <><PageTitle eyebrow="A SPACE TO LEARN TOGETHER" title="Create a classroom" description="Start a welcoming space where your learners can practice and grow together." /><form className="form-panel panel" onSubmit={submit}><div className="form-icon">🏡</div><label>Classroom name<input required maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Sunshine Sign Stars" /></label><label>A little about your class <span className="optional">(optional)</span><textarea rows="4" maxLength={240} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What are you learning together?" /></label><div className="form-note"><span>🔒</span><span>A unique invite code will be created for you. Only people with your code can request to join.</span></div><div className="form-actions"><button type="button" className="text-link" onClick={() => onNavigate("/classrooms")}>Cancel</button><Button type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create classroom"} <span>→</span></Button></div></form></>;
+  return <><PageTitle eyebrow="A SPACE TO LEARN TOGETHER" title="Create a classroom" description="Start a welcoming space where your learners can practice and grow together." /><form className="form-panel panel" onSubmit={submit}><div className="form-icon"><Icon name="home" size={27} /></div><label>Classroom name<input required maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Sunshine Sign Stars" /></label><label>A little about your class <span className="optional">(optional)</span><textarea rows="4" maxLength={240} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What are you learning together?" /></label><div className="form-note"><Icon name="lock" size={17} /><span>A unique invite code will be created for you. Only people with your code can request to join.</span></div><div className="form-actions"><button type="button" className="text-link" onClick={() => onNavigate("/classrooms")}>Cancel</button><Button type="submit" disabled={submitting}>{submitting ? "Creating…" : "Create classroom"} <span>→</span></Button></div></form></>;
 }
 
     function Profile({ user, onSave }) {
@@ -614,7 +820,7 @@ function CreateClassroom({ onNavigate, onToast }) {
         ["How do I join a virtual classroom?", "Ask your instructor for a classroom invite code. In this demo, classroom joining is represented by the learner management experience; learner invites can be connected to an account flow in a deployed version."],
         ["Is my camera video saved?", "No. The camera preview is processed by your browser only and is never recorded or uploaded by this application."],
       ];
-      return <><PageTitle eyebrow="WE'RE HERE FOR YOU" title="Help & about" description="Questions are part of learning. Find a few answers and helpful notes below." /><section className="help-intro"><span>🌼</span><div><h2>Learning with respect, always.</h2><p>Talinturo is a small step toward making FSL learning more welcoming and accessible. FSL is a living language, and the Filipino Deaf community is its heart. We encourage learning directly from Deaf signers and educators.</p></div></section><section className="panel faq-panel"><p className="eyebrow">A FEW COMMON QUESTIONS</p><h2>How can we help?</h2>{questions.map(([question, answer], index) => <div className={`faq-item ${open === index ? "faq-open" : ""}`} key={question}><button onClick={() => setOpen(open === index ? -1 : index)} aria-expanded={open === index}><strong>{question}</strong><span>{open === index ? "−" : "+"}</span></button>{open === index && <p>{answer}</p>}</div>)}</section><p className="help-contact">Still have questions? <a href="mailto:hello@talinturo.example">Say hello to our team</a>.</p></>;
+      return <><PageTitle eyebrow="WE'RE HERE FOR YOU" title="Help & about" description="Questions are part of learning. Find a few answers and helpful notes below." /><section className="help-intro"><span><Icon name="heart" size={24} /></span><div><h2>Learning with respect, always.</h2><p>Talinturo is a small step toward making FSL learning more welcoming and accessible. FSL is a living language, and the Filipino Deaf community is its heart. We encourage learning directly from Deaf signers and educators.</p></div></section><section className="panel faq-panel"><p className="eyebrow">A FEW COMMON QUESTIONS</p><h2>How can we help?</h2>{questions.map(([question, answer], index) => <div className={`faq-item ${open === index ? "faq-open" : ""}`} key={question}><button onClick={() => setOpen(open === index ? -1 : index)} aria-expanded={open === index}><strong>{question}</strong><span>{open === index ? "−" : "+"}</span></button>{open === index && <p>{answer}</p>}</div>)}</section><p className="help-contact">Still have questions? <a href="mailto:hello@talinturo.example">Say hello to our team</a>.</p></>;
     }
 
     function AuthPage({ mode, onAuth, onToast }) {
@@ -635,30 +841,30 @@ function CreateClassroom({ onNavigate, onToast }) {
           setLoading(false);
         }
       };
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span>✳</span></span><strong>talinturo</strong></Link><span className="auth-flower">🌼</span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" onClick={() => window.location.assign("/api/auth/google")}>◎ Continue with Google</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google sign-in securely authenticates through Google.</p></section><aside className="auth-side"><div className="auth-side-art"><span>👋</span><i>✦</i><b>✿</b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sparkles" size={24} /></span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" onClick={() => window.location.assign("/api/auth/google")}>◎ Continue with Google</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google sign-in securely authenticates through Google.</p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="hand" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function ForgotPassword({ onToast }) {
       const [email, setEmail] = useState("");
       const [sent, setSent] = useState(false);
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span>✳</span></span><strong>talinturo</strong></Link><span className="auth-flower">✉️</span><p className="eyebrow">A FRESH START</p><h1>{sent ? "Password reset isn't connected yet." : "Forgot your password?"}</h1><p className="auth-description">{sent ? "This local demo has no email delivery configured. Contact your administrator to reset your account." : "It happens! Enter your email to check the reset flow. Email delivery needs to be configured before a link can be sent."}</p>{sent ? <Button className="full-button" onClick={() => window.location.assign("/login")}>Back to sign in</Button> : <form onSubmit={(event) => { event.preventDefault(); setSent(true); }}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><Button className="full-button" type="submit">Continue <span>→</span></Button></form>}<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p></section><aside className="auth-side"><div className="auth-side-art"><span>🌱</span><i>✦</i><b>✿</b></div><h2>One little step<br />at a time.</h2><p>Your learning journey will be right here when you return.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="mail" size={24} /></span><p className="eyebrow">A FRESH START</p><h1>{sent ? "Password reset isn't connected yet." : "Forgot your password?"}</h1><p className="auth-description">{sent ? "This local demo has no email delivery configured. Contact your administrator to reset your account." : "It happens! Enter your email to check the reset flow. Email delivery needs to be configured before a link can be sent."}</p>{sent ? <Button className="full-button" onClick={() => window.location.assign("/login")}>Back to sign in</Button> : <form onSubmit={(event) => { event.preventDefault(); setSent(true); }}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><Button className="full-button" type="submit">Continue <span>→</span></Button></form>}<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="sprout" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>One little step<br />at a time.</h2><p>Your learning journey will be right here when you return.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function ResetPassword() {
-      return <section className="not-found panel"><span>🔐</span><p className="eyebrow">ACCOUNT RECOVERY</p><h1>Password reset isn't configured.</h1><p>This local demo has no email delivery or reset-token service. Ask your administrator for help, or return to sign in.</p><Link className="button button-primary" to="/login">Back to sign in <span>→</span></Link></section>;
+      return <section className="not-found panel"><Icon name="lock" size={44} /><p className="eyebrow">ACCOUNT RECOVERY</p><h1>Password reset isn't configured.</h1><p>This local demo has no email delivery or reset-token service. Ask your administrator for help, or return to sign in.</p><Link className="button button-primary" to="/login">Back to sign in <span>→</span></Link></section>;
     }
 
     function WelcomePage() {
-      return <section className="landing-page"><span className="welcome-label"><span>✦</span> WELCOME TO TALINTURO</span><h1>Small signs.<br /><span>Big connections.</span></h1><p>A welcoming place to explore Filipino Sign Language. Learn at your own pace, practice everyday moments, and celebrate every little win.</p><div className="landing-art" aria-hidden="true"><span>👋</span><i>✦</i><b>🌱</b></div><div className="landing-actions"><Link className="button button-primary" to="/signup">Start learning <span>→</span></Link><Link className="button button-outline" to="/login">I have an account</Link></div><small>Made for learners, families & educators</small></section>;
+      return <section className="landing-page"><span className="welcome-label"><span>✦</span> WELCOME TO TALINTURO</span><h1>Small signs.<br /><span>Big connections.</span></h1><p>A welcoming place to explore Filipino Sign Language. Learn at your own pace, practice everyday moments, and celebrate every little win.</p><div className="landing-art" aria-hidden="true"><span><Icon name="hand" size={48} /></span><i>✦</i><b><Icon name="sprout" size={26} /></b></div><div className="landing-actions"><Link className="button button-primary" to="/signup">Start learning <span>→</span></Link><Link className="button button-outline" to="/login">I have an account</Link></div><small>Made for learners, families & educators</small></section>;
     }
 
     function ProfileSetup({ onDone }) {
       const [goal, setGoal] = useState("Connect with family");
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span>✳</span></span><strong>talinturo</strong></Link><span className="auth-flower">🌱</span><p className="eyebrow">LET'S MAKE THIS YOURS</p><h1>What brings you here?</h1><p className="auth-description">We'll use this to make your learning journey feel a little more personal.</p><form onSubmit={(event) => { event.preventDefault(); onDone(); }}><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Connect with family</option><option>Everyday conversations</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label><label>I'm learning as<select defaultValue="Adult learner"><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><Button className="full-button" type="submit">Let's get started <span>→</span></Button></form><button className="skip-setup" onClick={onDone}>I'll do this later</button></section><aside className="auth-side"><div className="auth-side-art"><span>🌈</span><i>✦</i><b>✿</b></div><h2>Your story.<br />Your pace.</h2><p>There is no one way to learn. We'll meet you right where you are.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sprout" size={24} /></span><p className="eyebrow">LET'S MAKE THIS YOURS</p><h1>What brings you here?</h1><p className="auth-description">We'll use this to make your learning journey feel a little more personal.</p><form onSubmit={(event) => { event.preventDefault(); onDone(); }}><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Connect with family</option><option>Everyday conversations</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label><label>I'm learning as<select defaultValue="Adult learner"><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><Button className="full-button" type="submit">Let's get started <span>→</span></Button></form><button className="skip-setup" onClick={onDone}>I'll do this later</button></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="globe" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Your story.<br />Your pace.</h2><p>There is no one way to learn. We'll meet you right where you are.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function NotFound({ onNavigate }) {
-      return <section className="not-found panel"><span>🧭</span><p className="eyebrow">A LITTLE DETOUR</p><h1>We can't find that page.</h1><p>Looks like this path has changed. Let's find another way together.</p><Button onClick={() => onNavigate("/")}>Back to my dashboard <span>→</span></Button></section>;
+      return <section className="not-found panel"><Icon name="compass" size={44} /><p className="eyebrow">A LITTLE DETOUR</p><h1>We can't find that page.</h1><p>Looks like this path has changed. Let's find another way together.</p><Button onClick={() => onNavigate("/")}>Back to my dashboard <span>→</span></Button></section>;
     }
 
 export default App;
