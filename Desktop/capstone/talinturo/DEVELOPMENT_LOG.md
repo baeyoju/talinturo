@@ -1,5 +1,34 @@
 # Talinturo Development Log
 
+## November 2, 2026 — PostgreSQL backend and Google authentication
+
+### PostgreSQL backend integration
+
+- Added PostgreSQL support to the Flask API using `psycopg`, selected with `DATABASE_URL`; SQLite remains the default for local tests and setups without that variable.
+- Added startup checks for the expected PostgreSQL tables and a database connection check at `/api/health`.
+- Connected authentication, classroom memberships, invitations, activity attempts, learner progress, preferences, learning paths, vocabulary, and published scenarios to their PostgreSQL tables.
+- Added optional demo seeding for accounts, a classroom, starter learning content, vocabulary, and scenarios. Demo seeding is controlled by `TALINTURO_DEMO_MODE`.
+- Added account-backed preferences and updated learning content pages and instructor learner details to load from API data.
+- Documented PostgreSQL setup and environment variables in `SETUP.md` and `ENVIRONMENT.md`.
+
+### Google OAuth sign-up and login
+
+- Added separate Google OAuth flows for account sign-up and login. Sign-up creates a learner account; login requires an existing account. Verified Google emails can link to an existing Talinturo account.
+- Added redirects to profile setup or the role-appropriate dashboard, plus user-facing messages for unconfigured credentials, missing accounts, cancellation, and callback failures.
+- Added a Google sign-up action to the landing page and distinct Google actions to the sign-up and login screens.
+- Expanded Google OAuth callback and flow tests. Real-provider authentication requires credentials and matching authorized origin/callback settings from Google Cloud Console; it was not verified against a live Google OAuth client.
+
+### Environment documentation
+
+- Added `ENVIRONMENT.md` covering PostgreSQL connection settings, Flask session configuration, demo mode, and Google OAuth credentials, with PowerShell examples and secret-handling guidance.
+- Linked the environment guide from `README.md` and expanded Google OAuth setup and troubleshooting instructions in `SETUP.md`.
+
+### Validation
+
+- `python -m unittest backend.test_app` — passed (18 tests).
+- `npm run build` — passed.
+- `git diff --check` and Python syntax compilation — passed.
+
 ## October 31, 2026 — Responsive layouts, interface icons, and local preview
 
 ### Responsive layout fixes

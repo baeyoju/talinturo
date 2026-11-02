@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { api } from "./api.js";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { api, getPendingApiRequests, subscribeToApiLoading } from "./api.js";
+import ConnieLoader from "./ConnieLoader.jsx";
 
 const learnerNav = [
   { heading: "LEARN" },
@@ -23,34 +24,6 @@ const instructorNav = [
   { label: "My progress", to: "/progress", icon: "star" },
 ];
 
-const lessons = [
-  { id: "greetings", title: "Kumusta! Let's say hello", unit: "FSL Foundations", level: "Beginner", minutes: 8, icon: "👋", color: "peach", progress: 75 },
-  { id: "introductions", title: "All about me", unit: "FSL Foundations", level: "Beginner", minutes: 12, icon: "🙋", color: "lavender", progress: 0 },
-  { id: "everyday", title: "Everyday essentials", unit: "Daily conversations", level: "Beginner", minutes: 10, icon: "☀️", color: "yellow", progress: 0 },
-];
-
-const words = [
-  { word: "Kumusta", meaning: "Hello / How are you?", category: "Greetings", emoji: "👋", hint: "A friendly greeting to start a conversation." },
-  { word: "Salamat", meaning: "Thank you", category: "Everyday", emoji: "💛", hint: "Show gratitude with this everyday sign." },
-  { word: "Pamilya", meaning: "Family", category: "People", emoji: "👨‍👩‍👧", hint: "Talk about the people closest to you." },
-  { word: "Kaibigan", meaning: "Friend", category: "People", emoji: "🧑‍🤝‍🧑", hint: "Someone you enjoy spending time with." },
-  { word: "Tubig", meaning: "Water", category: "Everyday", emoji: "💧", hint: "A useful sign for asking for a drink." },
-  { word: "Paalam", meaning: "Goodbye", category: "Greetings", emoji: "🌤️", hint: "A warm way to end a conversation." },
-];
-
-const learners = [
-  { id: 1, name: "Mia Santos", initials: "MS", age: 12, level: "Sprout", lessons: 18, accuracy: 92, streak: 6, color: "coral" },
-  { id: 2, name: "Ethan Cruz", initials: "EC", age: 14, level: "Explorer", lessons: 24, accuracy: 86, streak: 3, color: "blue" },
-  { id: 3, name: "Lia Reyes", initials: "LR", age: 11, level: "Sprout", lessons: 11, accuracy: 78, streak: 2, color: "purple" },
-  { id: 4, name: "Noah Garcia", initials: "NG", age: 13, level: "Trailblazer", lessons: 31, accuracy: 95, streak: 9, color: "gold" },
-];
-
-const scenarios = [
-  { title: "At the sari-sari store", tag: "Everyday life", emoji: "🏪", color: "peach", description: "Practice asking for what you need in a friendly neighborhood shop." },
-  { title: "Meeting a new friend", tag: "Social", emoji: "🧑‍🤝‍🧑", color: "lavender", description: "Introduce yourself and learn a little about someone new." },
-  { title: "Lunchtime at school", tag: "School", emoji: "🍱", color: "mint", description: "Share what you like and ask a classmate a question." },
-];
-
 const iconArtwork = {
   book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" /><path d="M4 5.5v16M8 7h8M8 11h8" /></>,
   bookOpen: <><path d="M12 7v14M12 7C9.5 4.5 6.5 4 3 4v14c3.5 0 6.5.5 9 3M12 7c2.5-2.5 5.5-3 9-3v14c-3.5 0-6.5.5-9 3" /></>,
@@ -63,6 +36,7 @@ const iconArtwork = {
   lifeBuoy: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" /><path d="m5.6 5.6 4.3 4.3m4.2 4.2 4.3 4.3m0-12.8-4.3 4.3m-4.2 4.2-4.3 4.3" /></>,
   sprout: <><path d="M12 21v-9M12 13c0-5 3-8 8-8 0 5-3 8-8 8zM12 16c0-4-2.5-6-7-6 0 4.5 2.5 6 7 6z" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
+  moon: <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.6 8.6 0 1 0 11 11z" />,
   flame: <><path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-2-1-3-3-3-5-3 3-4 6-4 9a7 7 0 0 0 7 7z" /><path d="M12 22a3 3 0 0 0 3-3c0-1.5-1-2.5-2-4-1 1-2 2-2 4a1 1 0 0 0 1 3z" /></>,
   star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" />,
   heart: <path d="M20.8 8.8c0 4.2-8.8 10-8.8 10s-8.8-5.8-8.8-10a4.5 4.5 0 0 1 8.8-1.3 4.5 4.5 0 0 1 8.8 1.3z" />,
@@ -84,34 +58,8 @@ function Icon({ name, size = 20, className = "" }) {
   return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{iconArtwork[name]}</svg>;
 }
 
-function colorLuminance(color) {
-  const channels = color.match(/[0-9a-f]{2}/gi)?.map((channel) => parseInt(channel, 16) / 255);
-  if (!channels || channels.length !== 3) return null;
-  return channels
-    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
-    .reduce((total, channel, index) => total + channel * [0.2126, 0.7152, 0.0722][index], 0);
-}
-
-function textShadow(textColor, backgroundColor) {
-  const textLuminance = colorLuminance(textColor);
-  const backgroundLuminance = colorLuminance(backgroundColor);
-  if (textLuminance === null || backgroundLuminance === null) return "none";
-
-  const textIsDark = textLuminance <= 0.5;
-  const backgroundIsDark = backgroundLuminance <= 0.5;
-  if (textIsDark !== backgroundIsDark) return "none";
-
-  const shadowColor = textIsDark ? "#f7f5ef" : "#626a64";
-  return [
-    `.65px 0 ${shadowColor}`,
-    `-.65px 0 ${shadowColor}`,
-    `0 .65px ${shadowColor}`,
-    `0 -.65px ${shadowColor}`,
-    `.46px .46px ${shadowColor}`,
-    `-.46px .46px ${shadowColor}`,
-    `.46px -.46px ${shadowColor}`,
-    `-.46px -.46px ${shadowColor}`,
-  ].join(", ");
+function BrandLogo({ className = "" }) {
+  return <img className={`brand-logo ${className}`} src="/talinturo-logo.png" alt="" />;
 }
 
 function Toast({ message, onClose }) {
@@ -127,16 +75,17 @@ function App() {
   const [role, setRole] = useState(localStorage.getItem("talinturo-role") || "learner");
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem("talinturo-settings");
+    const savedSettings = saved ? JSON.parse(saved) : {};
     return {
       reminders: true,
       sound: true,
       reducedMotion: false,
       weekly: false,
-      themeAccent: "#2a694e",
-      themeBackground: "#f5f7f2",
-      themeText: "#26372d",
-      themeMuted: "#829087",
-      ...(saved ? JSON.parse(saved) : {}),
+      themeMode: savedSettings.themeMode === "dark" ? "dark" : "light",
+      ...(typeof savedSettings.reminders === "boolean" ? { reminders: savedSettings.reminders } : {}),
+      ...(typeof savedSettings.sound === "boolean" ? { sound: savedSettings.sound } : {}),
+      ...(typeof savedSettings.reducedMotion === "boolean" ? { reducedMotion: savedSettings.reducedMotion } : {}),
+      ...(typeof savedSettings.weekly === "boolean" ? { weekly: savedSettings.weekly } : {}),
     };
   });
   const [user, setUser] = useState({
@@ -146,36 +95,76 @@ function App() {
     learner_type: "Adult learner",
     learning_goal: "Everyday conversations",
   });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const [toast, setToast] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [apiOnline, setApiOnline] = useState(null);
+  const pendingApiRequests = useSyncExternalStore(subscribeToApiLoading, getPendingApiRequests, getPendingApiRequests);
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
+    let active = true;
     api("/auth/me")
       .then((result) => {
+        if (!active) return;
         setApiOnline(true);
+        setIsAuthenticated(true);
         setRole(result.user.role);
         localStorage.setItem("talinturo-role", result.user.role);
         localStorage.setItem("talinturo-name", result.user.name);
         setUser(result.user);
       })
-      .catch(() => api("/auth/demo", { method: "POST", body: JSON.stringify({ role }) })
-        .then((result) => {
-          setApiOnline(true);
-          setUser((current) => ({ ...result.user, name: localStorage.getItem("talinturo-name") || result.user.name }));
-        })
-        .catch(() => setApiOnline(false)));
+      .catch(() => {
+        if (active) setApiOnline(false);
+      })
+      .finally(() => {
+        if (active) setAuthLoading(false);
+      });
+    return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user.id) return undefined;
+    let active = true;
+    api("/preferences")
+      .then(({ preferences }) => {
+        if (!active) return;
+        const savedSettings = {
+          themeMode: preferences.theme_mode === "dark" ? "dark" : "light",
+          reminders: Boolean(preferences.reminders),
+          sound: Boolean(preferences.sound),
+          reducedMotion: Boolean(preferences.reduced_motion),
+          weekly: Boolean(preferences.weekly_summary),
+        };
+        setSettings(savedSettings);
+        localStorage.setItem("talinturo-settings", JSON.stringify(savedSettings));
+      })
+      .catch((error) => {
+        if (active) setToast(`Couldn't load your saved preferences: ${error.message}`);
+      });
+    return () => { active = false; };
+  }, [isAuthenticated, user.id]);
 
   useEffect(() => {
     setMobileOpen(false);
     setMenuOpen(false);
-    if (new URLSearchParams(location.search).has("oauth_error")) {
-      setToast("Google sign-in failed. Please try again or use email and password.");
-      navigate("/login", { replace: true });
+    const oauthError = new URLSearchParams(location.search).get("oauth_error");
+    if (oauthError) {
+      const messages = {
+        not_configured: "Google sign-in isn't configured yet. Add the OAuth client ID and secret to the backend environment.",
+        invalid_flow: "That Google sign-in link is invalid. Please try again.",
+        start_failed: "Google sign-in couldn't be started. Please try again.",
+        account_not_found: "No Talinturo account uses that Google email yet. Choose Create an account to sign up.",
+        account_unavailable: "Google couldn't verify the account details required to sign in.",
+        cancelled: "Google sign-in was cancelled. You can try again whenever you're ready.",
+        callback_failed: "Google sign-in didn't complete. Please try again or use email and password.",
+      };
+      setToast(messages[oauthError] || "Google sign-in didn't complete. Please try again.");
+      const fallbackRoute = location.pathname === "/signup" ? "/signup" : "/login";
+      navigate(fallbackRoute, { replace: true });
     }
   }, [location.pathname, location.search, navigate]);
 
@@ -201,25 +190,86 @@ function App() {
       return;
     }
     localStorage.removeItem("talinturo-name");
+    setIsAuthenticated(false);
     setUser({ name: "Alex Rivera", role });
     setToast("You have been signed out.");
-    navigate("/login");
+    navigate("/");
   };
 
+  const acceptAuth = (account) => {
+    setApiOnline(true);
+    localStorage.setItem("talinturo-name", account.name);
+    localStorage.setItem("talinturo-role", account.role);
+    setRole(account.role);
+    setUser(account);
+    setIsAuthenticated(true);
+  };
+
+  const savePreferences = async (nextSettings) => {
+    try {
+      const result = await api("/preferences", {
+        method: "PUT",
+        body: JSON.stringify({
+          theme_mode: nextSettings.themeMode,
+          reminders: nextSettings.reminders,
+          sound: nextSettings.sound,
+          reduced_motion: nextSettings.reducedMotion,
+          weekly_summary: nextSettings.weekly,
+        }),
+      });
+      const savedSettings = {
+        themeMode: result.preferences.theme_mode,
+        reminders: Boolean(result.preferences.reminders),
+        sound: Boolean(result.preferences.sound),
+        reducedMotion: Boolean(result.preferences.reduced_motion),
+        weekly: Boolean(result.preferences.weekly_summary),
+      };
+      setSettings(savedSettings);
+      localStorage.setItem("talinturo-settings", JSON.stringify(savedSettings));
+      setToast("Your preferences have been saved to your account.");
+    } catch (error) {
+      setToast(`Couldn't save your preferences: ${error.message}`);
+    }
+  };
+
+  const appStyle = {
+    "--green": settings.themeMode === "dark" ? "#a9bcff" : "#1e40c2",
+    "--green-dark": settings.themeMode === "dark" ? "#8ba5ff" : "#1835a0",
+    "--green-soft": settings.themeMode === "dark" ? "#293456" : "#e8edff",
+    "--canvas": settings.themeMode === "dark" ? "#17191f" : "#f7f1e5",
+    "--ink": settings.themeMode === "dark" ? "#f4f1eb" : "#383737",
+    "--ink-shadow": "none",
+    "--muted": settings.themeMode === "dark" ? "#b1b2b8" : "#807a71",
+    "--muted-shadow": "none",
+  };
+
+  if (authLoading) {
+    return <div className="app-shell public-shell" style={appStyle}><div className="public-loading">Getting your learning space ready…</div><ConnieLoader active={pendingApiRequests > 0} /></div>;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="app-shell public-shell" style={appStyle}>
+        <Routes>
+          <Route path="/" element={<LandingPage onNavigate={navigate} onAuth={acceptAuth} onToast={setToast} />} />
+          <Route path="/welcome" element={<LandingPage onNavigate={navigate} onAuth={acceptAuth} onToast={setToast} />} />
+          <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { acceptAuth(account); navigate(account.role === "instructor" ? "/instructor" : "/"); }} onToast={setToast} />} />
+          <Route path="/signup" element={<AuthPage mode="signup" onAuth={(account) => { acceptAuth(account); navigate("/profile/setup"); }} onToast={setToast} />} />
+          <Route path="/forgot-password" element={<ForgotPassword onToast={setToast} />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <ConnieLoader active={pendingApiRequests > 0} />
+        <Toast message={toast} onClose={() => setToast("")} />
+      </div>
+    );
+  }
+
   return (
-    <div className="app-shell" style={{
-      "--green": settings.themeAccent,
-      "--green-dark": `color-mix(in srgb, ${settings.themeAccent} 75%, black)`,
-      "--green-soft": `color-mix(in srgb, ${settings.themeAccent} 12%, white)`,
-      "--canvas": settings.themeBackground,
-      "--ink": settings.themeText,
-      "--ink-shadow": textShadow(settings.themeText, settings.themeBackground),
-      "--muted": settings.themeMuted,
-      "--muted-shadow": textShadow(settings.themeMuted, settings.themeBackground),
-    }}>
+    <div className="app-shell workspace-shell" data-theme={settings.themeMode} style={appStyle}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <Link className="brand" to="/" aria-label="Talinturo home">
-          <span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span>
+          <BrandLogo className="brand-logo-sidebar" />
           <span className="brand-name">talinturo<small>FSL, one sign at a time</small></span>
         </Link>
         <div className="sidebar-profile">
@@ -270,7 +320,7 @@ function App() {
             <Route path="/challenge/success" element={<ChallengeFeedback success onNavigate={navigate} />} />
             <Route path="/challenge/try-again" element={<ChallengeFeedback onNavigate={navigate} />} />
             <Route path="/progress" element={<Progress />} />
-            <Route path="/instructor" element={<InstructorDashboard onNavigate={navigate} />} />
+            <Route path="/instructor" element={<InstructorDashboard user={user} onNavigate={navigate} />} />
             <Route path="/learners" element={<LearnerManagement onNavigate={navigate} />} />
             <Route path="/learners/:id" element={<LearnerDetails />} />
             <Route path="/classrooms" element={<Classrooms onNavigate={navigate} />} />
@@ -286,20 +336,21 @@ function App() {
                 setToast(`Couldn't update your profile: ${error.message}`);
               }
             }} />} />
-            <Route path="/settings" element={<Settings settings={settings} setSettings={setSettings} onToast={setToast} />} />
+            <Route path="/settings" element={<Settings settings={settings} setSettings={setSettings} onSave={savePreferences} onToast={setToast} />} />
             <Route path="/help" element={<Help />} />
-            <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { localStorage.setItem("talinturo-name", account.name); localStorage.setItem("talinturo-role", account.role); setRole(account.role); setUser(account); navigate(account.role === "instructor" ? "/instructor" : "/"); }} onToast={setToast} />} />
-            <Route path="/signup" element={<AuthPage mode="signup" onAuth={(account) => { localStorage.setItem("talinturo-name", account.name); localStorage.setItem("talinturo-role", "learner"); setRole("learner"); setUser(account); navigate("/profile/setup"); }} onToast={setToast} />} />
+            <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { acceptAuth(account); navigate(account.role === "instructor" ? "/instructor" : "/"); }} onToast={setToast} />} />
+            <Route path="/signup" element={<AuthPage mode="signup" onAuth={(account) => { acceptAuth(account); navigate("/profile/setup"); }} onToast={setToast} />} />
             <Route path="/profile/setup" element={<ProfileSetup onDone={() => navigate("/")} />} />
             <Route path="/forgot-password" element={<ForgotPassword onToast={setToast} />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/welcome" element={<WelcomePage />} />
+            <Route path="/welcome" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound onNavigate={navigate} />} />
           </Routes>
         </main>
         <footer className="footer"><span>Made with <b><Icon name="heart" size={13} /></b> for a more inclusive world</span><span>© 2026 Talinturo <i>·</i> <Link to="/help">About</Link> <i>·</i> <Link to="/help">Privacy</Link></span></footer>
       </div>
       <Toast message={toast} onClose={() => setToast("")} />
+      <ConnieLoader active={pendingApiRequests > 0} />
     </div>
   );
 }
@@ -326,160 +377,237 @@ function ProgressBar({ value, color = "green" }) {
   return <div className={`progress-track progress-${color}`}><span style={{ width: `${Math.min(value, 100)}%` }} /></div>;
 }
 
-function Dashboard({ user, onNavigate }) {
-  const featureCards = [
-    { title: "Live lessons", subtitle: "Small-group learning", color: "peach", icon: "bookOpen" },
-    { title: "Story-based practice", subtitle: "Real life scenarios", color: "pink", icon: "brain" },
-    { title: "Family learning", subtitle: "Shared progress", color: "yellow", icon: "users" },
-    { title: "Confidence coaching", subtitle: "Supportive feedback", color: "mint", icon: "sparkles" },
-  ];
+function LandingPage({ onNavigate, onAuth, onToast }) {
+  const [signup, setSignup] = useState({ name: "", email: "", password: "" });
+  const [loading, setLoading] = useState(false);
 
-  const scenarioCards = [
-    { title: "At home", copy: "Learn everyday phrases and routines in familiar spaces.", color: "sand", icon: "home", badge: "Home" },
-    { title: "At school", copy: "Build confidence with classmates and classroom routines.", color: "pink", icon: "school", badge: "School" },
-    { title: "During travel", copy: "Practice signs you can use when exploring the world.", color: "mint", icon: "globe", badge: "Travel" },
-    { title: "In an emergency", copy: "Know the signs that help you communicate quickly and clearly.", color: "deep", icon: "lifeBuoy", badge: "SOS" },
-  ];
+  const createAccount = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const result = await api("/auth/signup", { method: "POST", body: JSON.stringify(signup) });
+      onAuth(result.user);
+      onNavigate("/profile/setup");
+    } catch (error) {
+      onToast(`Couldn't create your account: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const contactNotice = (event) => {
+    event.preventDefault();
+    onToast("Contact messaging isn't connected in this demo yet.");
+  };
 
   return (
-    <div className="landing-page">
-      <header className="landing-header">
-        <div className="topbar">
-          <div className="brand-lockup" aria-label="Talinturo home">
-            <div className="brand-mark">T</div>
-            <div className="brand-copy">
-              <span className="brand-title">Talinturo</span>
-              <small>Sign language for every learner</small>
-            </div>
-          </div>
-
-          <nav className="header-nav" aria-label="Main navigation">
-            {[
-              { label: "Programs", href: "/paths" },
-              { label: "Resources", href: "/vocabulary" },
-              { label: "About", href: "/help" },
-              { label: "Support", href: "/practice" },
-            ].map((item) => (
-              <button key={item.label} type="button" className="header-link" onClick={() => onNavigate(item.href)}>{item.label}</button>
-            ))}
+    <div className="public-landing">
+      <section className="landing-hero" id="home">
+        <header className="public-header">
+          <a className="public-brand" href="#home" aria-label="Talinturo home"><BrandLogo className="brand-logo-public" /><span>TALINTURO</span></a>
+          <nav aria-label="Landing page navigation">
+            <a className="public-nav-active" href="#home">Home <span>•</span></a>
+            <a href="#about">About</a>
+            <a href="#contact">Contact</a>
           </nav>
-
-          <div className="header-actions">
-            <button type="button" className="ghost-button" onClick={() => onNavigate("/login")}>Sign in</button>
-            <button type="button" className="primary-button" onClick={() => onNavigate("/practice")}>Get started</button>
+          <a className="landing-button landing-button-yellow" href="#join">Get Started <span aria-hidden="true">↗</span></a>
+        </header>
+        <div className="hero-cloud">
+          <span className="hero-pill">A little play. A lot of connection.</span>
+          <svg className="hero-sparkle hero-sparkle-one" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 0C27.5 15 33 20.5 48 24C33 27.5 27.5 33 24 48C20.5 33 15 27.5 0 24C15 20.5 20.5 15 24 0Z" /><circle cx="24" cy="24" r="3" /></svg>
+          <svg className="hero-sparkle hero-sparkle-two" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 0C27.5 15 33 20.5 48 24C33 27.5 27.5 33 24 48C20.5 33 15 27.5 0 24C15 20.5 20.5 15 24 0Z" /><circle cx="24" cy="24" r="3" /></svg>
+          <h1>Learn Filipino<br />Sign Language</h1>
+          <p>Bridge communication barriers at home and in everyday life with playful lessons. 100% free for everyone.</p>
+          <div className="hero-buttons">
+            <a className="landing-button landing-button-coral" href="#join">Get Started <span aria-hidden="true">↗</span></a>
+            <a className="landing-button landing-button-yellow" href="#contact">Contribute <span aria-hidden="true">↗</span></a>
           </div>
         </div>
-      </header>
+        <div className="hero-wave" aria-hidden="true" />
+      </section>
 
-      <main className="landing-main">
-        <section className="hero-section">
-          <div className="hero-copy">
-            <p className="kicker">Learning by doing</p>
-            <h1>
-              Big smiles.<br />
-              Little signs.<br />
-              Big hearts.
-            </h1>
-            <p className="subcopy">
-              We make it easier to learn Filipino Sign Language with supportive lessons, real-life
-              situations, and community-driven practice.
-            </p>
+      <section className="landing-join" id="join">
+        <p className="landing-section-title">Your next connection starts here.</p>
+        <div className="join-layout">
+          <div className="join-mascot join-mascot-dog" aria-hidden="true">
+            <span className="mascot-face">🐶</span>
+            <strong>Small steps.<br />Shared understanding.</strong>
+            <span className="mascot-caption">For every age, at every stage.</span>
+          </div>
+          <div className="join-card">
+            <h2>Join us today!</h2>
+            <p>A space to learn, play, and connect.</p>
+            <form onSubmit={createAccount}>
+              <label>Your name<input value={signup.name} onChange={(event) => setSignup({ ...signup, name: event.target.value })} autoComplete="name" required maxLength={70} placeholder="How should we call you?" /></label>
+              <label>Email<input type="email" value={signup.email} onChange={(event) => setSignup({ ...signup, email: event.target.value })} autoComplete="email" required placeholder="you@example.com" /></label>
+              <label>Password<input type="password" value={signup.password} onChange={(event) => setSignup({ ...signup, password: event.target.value })} autoComplete="new-password" minLength={8} required placeholder="Create a password" /></label>
+              <button className="landing-button landing-button-blue" type="submit" disabled={loading}>{loading ? "Creating account…" : "Create account"}</button>
+            </form>
+            <div className="join-or"><span>or sign up with</span></div>
+            <button className="join-google-button" type="button" onClick={() => window.location.assign("/api/auth/google?flow=signup")}>◎ Sign up with Google</button>
+            <p className="join-signin">Already learning with us? <button type="button" onClick={() => onNavigate("/login")}>Sign in</button></p>
+          </div>
+          <div className="join-mascot join-mascot-bird" aria-hidden="true">
+            <span className="free-bubble">100% free.<br />For everyone.</span>
+            <span className="mascot-face">🐥</span>
+          </div>
+        </div>
+        <span className="join-floating-avatar" aria-hidden="true">🙂</span>
+        <div className="join-wave" aria-hidden="true" />
+      </section>
 
-            <div className="hero-actions">
-              <button type="button" className="primary-button" onClick={() => onNavigate("/practice")}>Get started</button>
-              <button type="button" className="secondary-button" onClick={() => onNavigate("/paths")}>Explore lessons</button>
-            </div>
-
-            <div className="social-proof">
-              <div>
-                <strong>4.9/5</strong>
-                <span>learner reviews</span>
+      <section className="landing-about" id="about">
+        <div className="landing-section-inner">
+          <p className="landing-kicker">BUILT FOR SHARED UNDERSTANDING</p>
+          <h2>About the Platform</h2>
+          <p className="landing-about-intro">A playful approach to Filipino Sign Language, shaped around the way you learn — at home and in the classroom.</p>
+          <div className="about-layout">
+            <div className="learning-preview" aria-hidden="true">
+              <div className="preview-bunny">🐰</div>
+              <div className="preview-card">
+                <small>Everyday connections <span>●</span></small>
+                <div className="preview-tiles"><span>📖</span><span>☕</span></div>
+                <div className="preview-progress"><i /><i /><i /><i /><i /></div>
+                <p>Notice. Practice. Connect.</p>
               </div>
-              <div>
-                <strong>2k+</strong>
-                <span>happy learners</span>
-              </div>
+            </div>
+            <div className="about-features">
+              <article><h3>Learn through everyday moments</h3><p>Build familiarity with useful signs in friendly, real-life situations.</p><span>Explore and recognize</span></article>
+              <article><h3>Practice at your own pace</h3><p>Use guided activities and revisit lessons whenever you need.</p><span>Practice with confidence</span></article>
+              <article><h3>Make learning a shared experience</h3><p>Discover ways to learn together with family, friends, and educators.</p><span>Notice. Practice. Connect.</span></article>
             </div>
           </div>
-
-          <div className="hero-art" aria-hidden="true">
-            <svg viewBox="0 0 500 340" role="img">
-              <g>
-                <path d="M267 54c44-33 109-25 146 20 33 40 33 95 6 129-18 22-44 35-71 36l-4 38c-2 22-17 41-38 51-22 10-48 8-69-7-13-9-22-21-27-35l-33 25c-11 8-26 9-38 2-11-6-19-17-21-29l-15-3c-16-2-30-13-36-29-7-19-1-40 16-53l10-9-12-34c-9-23-6-49 12-68 20-22 53-34 83-26l6-10c10-18 29-30 50-32 11-2 23-2 34 2zm-88 107c-26 0-47 21-47 47s21 47 47 47 47-21 47-47-21-47-47-47z" fill="#f46438" opacity="0.14" />
-                <path d="M76 162c0-65 52-117 117-117h96c58 0 104 44 104 99v31c0 47-38 85-85 85h-52l-34 51c-6 9-17 14-29 12-12-2-22-10-27-21l-24-52h-66c-46 0-83-37-83-83v-5zm124-24c-13 0-24 11-24 25s11 25 24 25h56c13 0 24-11 24-25s-11-25-24-25h-56z" fill="#F6B720" />
-                <path d="M204 95c-22 0-39 18-39 40v96c0 15 12 27 27 27h27c11 0 20-9 20-20v-59l72-1c18 0 33-15 33-33s-15-33-33-33h-72v-14c0-12-10-22-22-22h-2z" fill="#0B3D7D" />
-                <path d="M311 97c17 2 32 12 42 27-8-2-15-4-22-6l-20-21zm-118 38c-13 0-23 10-23 23v86c0 13 11 23 23 23h20c15 0 27-12 27-27v-31h58c13 0 24-11 24-24 0-13-11-24-24-24h-58v-15c0-10-8-18-18-18h-20zm89 7c7-2 15-1 21 3l52 35c8 5 13 15 13 25 0 12-7 23-18 28l-45 20c-11 5-24 2-32-7-7-8-9-19-5-29l8-22-28-14c-9-4-15-14-15-24 0-8 4-16 11-20l39-19z" fill="#2A84FF" />
-                <path d="M306 102l30 26-52 25 22-51z" fill="#F6B720" />
-                <path d="M294 255c52-22 81-15 108 5 17 12 32 23 36 42-25 5-49 7-77 8-28 0-56-4-83-13 3-13 8-27 16-42z" fill="#0B3D7D" />
-                <circle cx="352" cy="118" r="33" fill="#e7f0ff" opacity="0.9" />
-                <path d="M342 118c9-9 20-14 31-14 12 0 21 5 29 12-12 3-20 11-24 22-5-7-12-13-36-20z" fill="#0B3D7D" opacity="0.16" />
-                <path d="M398 138l34 46" stroke="#0B3D7D" strokeWidth="8" strokeLinecap="round" />
-                <path d="M115 254c31 23 61 36 96 41" stroke="#f3c156" strokeWidth="12" strokeLinecap="round" fill="none" opacity="0.7" />
-                <path d="M142 226l-26 28" stroke="#f3c156" strokeWidth="12" strokeLinecap="round" fill="none" opacity="0.7" />
-                <circle cx="116" cy="282" r="10" fill="#f3c156" opacity="0.72" />
-                <circle cx="404" cy="200" r="8" fill="#f3c156" opacity="0.72" />
-                <circle cx="428" cy="66" r="7" fill="#f3c156" opacity="0.72" />
-              </g>
-            </svg>
-          </div>
-        </section>
-
-        <div className="blue-strip" aria-hidden="true" />
-
-        <section className="feature-section">
-          <p className="section-tag">Let’s grow together</p>
-          <h2>We put a place for every learner</h2>
-
-          <div className="feature-grid">
-            {featureCards.map((card) => (
-              <article key={card.title} className={`feature-card ${card.color}`}>
-                <div className="feature-icon"><Icon name={card.icon} size={29} /></div>
-                <h3>{card.title}</h3>
-                <p>{card.subtitle}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="scenario-section">
-          <div className="scenario-header">
-            <h2>Learn from Real-Life Scenario</h2>
-          </div>
-
-          <div className="scenario-grid">
-            {scenarioCards.map((card) => (
-              <article key={card.title} className={`scenario-card ${card.color}`}>
-                <div className="scenario-topline">
-                  <span className="scenario-badge">{card.badge}</span>
-                  <span className="scenario-icon"><Icon name={card.icon} size={27} /></span>
-                </div>
-                <h3>{card.title}</h3>
-                <p>{card.copy}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="cta-panel">
-          <div className="cta-copy">
-            <span className="cta-kicker">Learn sign language. Connect with confidence.</span>
-            <h3>Let’s make communication more inclusive.</h3>
-            <button type="button" className="cta-button" onClick={() => onNavigate("/practice")}>Learn with us</button>
-          </div>
-        </section>
-      </main>
-
-      <footer className="landing-footer">
-        <div className="footer-brand">
-          <span className="brand-mark small">T</span>
-          <span>Talinturo</span>
         </div>
-        <div className="footer-meta">
-          <span>© 2026 Talinturo</span>
-          <span>Privacy</span>
-          <span>Terms</span>
+      </section>
+
+      <section className="landing-learners" id="learners">
+        <div className="learners-heading">
+          <div><p className="landing-kicker">DIFFERENT LEARNERS. ONE SHARED LANGUAGE.</p><h2>Tailored for Every Learner</h2></div>
+          <p>A path that meets you where you are — at home, in class, or simply curious.</p>
         </div>
-      </footer>
+        <div className="learner-cards">
+          {[
+            ["Talinturo Kids", "Explore bite-sized lessons and friendly scenarios that make practice feel approachable.", "Explore playful learning"],
+            ["FSL Students", "Practice useful vocabulary and everyday scenarios in a supportive space.", "Start learning"],
+            ["Casual Learner", "Begin with beginner-friendly paths and short practice activities. Learn a little at a time.", "Find a learning path"],
+            ["For FSL Instructors", "Create classrooms, manage learner rosters, and keep track of progress.", "Explore classroom tools"],
+          ].map(([title, copy, link], index) => (
+            <a className="learner-card" href="#join" key={title}>
+              <span className={`learner-card-art learner-card-art-${index + 1}`} aria-hidden="true">{["🌱", "📚", "✨", "🌼"][index]}</span>
+              <strong>{title}</strong><p>{copy}</p><span className="learner-card-link">{link}<b aria-hidden="true">↗</b></span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-team" id="team">
+        <span className="hero-pill">The people behind the purpose</span>
+        <h2>Meet the Team</h2>
+        <p className="team-subtitle">Meet the people building TALINTURO.</p>
+        <div className="team-layout">
+          <div className="team-art" aria-hidden="true"><span>👋</span><span>💛</span><span>🤟</span></div>
+          <div><h3>One team, one mission.</h3><p>We believe small moments of understanding can make a big difference. Talinturo is here to make Filipino Sign Language learning more welcoming, practical, and joyful for everyone.</p></div>
+        </div>
+      </section>
+
+      <section className="landing-contact" id="contact">
+        <div className="contact-layout">
+          <div><p className="landing-contact-kicker">CONTACT</p><h2>Good things start with a conversation.</h2><p>Have a question, an idea, or a way to contribute? We'd love to hear from you.</p></div>
+          <form className="contact-card" onSubmit={contactNotice}>
+            <h3>Send us a message</h3>
+            <div className="contact-fields">
+              <label>Name<input required placeholder="Your name" /></label>
+              <label>Email<input type="email" required placeholder="you@example.com" /></label>
+            </div>
+            <label>Message<textarea required rows="3" placeholder="What would you like to share?" /></label>
+            <button className="landing-button landing-button-blue" type="submit">Send Message</button>
+            <small>Contact messaging isn't connected in this demo yet.</small>
+          </form>
+        </div>
+        <footer className="public-footer">
+          <a className="public-brand" href="#home" aria-label="Talinturo home"><BrandLogo className="brand-logo-public" /><span>TALINTURO</span></a>
+          <span>Filipino Sign Language. Free for everyone.</span>
+          <small>© 2026 TALINTURO</small>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function Dashboard({ user, onNavigate }) {
+  const [summary, setSummary] = useState(null);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    api("/dashboard")
+      .then(setSummary)
+      .catch((error) => setLoadError(error.message));
+  }, []);
+
+  const firstName = user.name.split(" ")[0];
+
+  return (
+    <div className="learner-dashboard">
+      <section className="learner-hero">
+        <div className="learner-hero-copy">
+          <span className="dashboard-kicker">YOUR LEARNING SPACE</span>
+          <h1>Hi, {firstName}!<br />Ready for a little progress?</h1>
+          <p>Every sign is a new way to connect. Pick up where you left off, or explore something new.</p>
+          <div className="learner-hero-actions">
+            <Button className="dashboard-button-yellow" onClick={() => onNavigate("/practice")}>Continue learning <span>→</span></Button>
+            <button className="dashboard-text-button" onClick={() => onNavigate("/paths")}>Browse learning paths</button>
+          </div>
+        </div>
+        <div className="learner-hero-art" aria-hidden="true">
+          <div className="learner-art-orbit"><Icon name="hand" size={76} /></div>
+          <span className="learner-art-spark learner-art-spark-one">✦</span>
+          <span className="learner-art-spark learner-art-spark-two">✦</span>
+          <span className="learner-art-caption">One sign at a time</span>
+        </div>
+      </section>
+
+      {loadError && <p className="inline-error" role="alert">Could not load your learning summary: {loadError}</p>}
+
+      <section className="dashboard-metrics" aria-label="Your learning at a glance">
+        <StatCard icon="bookOpen" tone="blue" label="Lessons completed" value={summary ? summary.lessons_completed : "—"} change="Every step counts" />
+        <StatCard icon="star" tone="yellow" label="Practice accuracy" value={summary ? `${summary.average_score}%` : "—"} change="Keep building confidence" />
+        <StatCard icon="flame" tone="coral" label="Learning streak" value="6 days" change="A little practice each day" />
+      </section>
+
+      <div className="learner-dashboard-grid">
+        <section className="dashboard-card continue-card">
+          <div className="dashboard-card-heading">
+            <div><p className="dashboard-kicker">PICK UP WHERE YOU LEFT OFF</p><h2>Your next lesson</h2></div>
+            <span className="dashboard-step">01 / 04</span>
+          </div>
+          <div className="next-lesson">
+            <div className="next-lesson-art"><Icon name="hand" size={39} /></div>
+            <div className="next-lesson-copy">
+              <span className="dashboard-kicker">FSL FOUNDATIONS · BEGINNER</span>
+              <h3>Kumusta! Let's say hello</h3>
+              <p>Practice a friendly greeting and start a conversation.</p>
+              <div className="next-lesson-progress"><ProgressBar value={75} color="blue" /><span>75%</span></div>
+            </div>
+          </div>
+          <div className="next-lesson-footer"><span>About 8 minutes</span><Button onClick={() => onNavigate("/practice")}>Continue <span>→</span></Button></div>
+        </section>
+
+        <section className="dashboard-card quick-start-card">
+          <div className="dashboard-card-heading"><div><p className="dashboard-kicker">MAKE A CONNECTION</p><h2>Quick ways to learn</h2></div><span className="quick-start-star">✦</span></div>
+          <button className="quick-start-link" onClick={() => onNavigate("/vocabulary")}><span className="quick-start-icon quick-start-blue"><Icon name="book" size={21} /></span><span><strong>Explore vocabulary</strong><small>Learn useful everyday signs</small></span><b>→</b></button>
+          <button className="quick-start-link" onClick={() => onNavigate("/scenarios")}><span className="quick-start-icon quick-start-coral"><Icon name="message" size={21} /></span><span><strong>Try a real-life story</strong><small>Practice in a friendly setting</small></span><b>→</b></button>
+          <button className="quick-start-link" onClick={() => onNavigate("/challenge")}><span className="quick-start-icon quick-start-yellow"><Icon name="sparkles" size={21} /></span><span><strong>Take a level challenge</strong><small>See what you already know</small></span><b>→</b></button>
+        </section>
+
+        <section className="dashboard-card learner-path-card">
+          <div className="dashboard-card-heading"><div><p className="dashboard-kicker">SMALL STEPS, BIG CONNECTIONS</p><h2>Your learning paths</h2></div><button className="dashboard-inline-link" onClick={() => onNavigate("/paths")}>See all <span>→</span></button></div>
+          <div className="learner-paths">
+            <button className="learner-path-item path-item-yellow" onClick={() => onNavigate("/paths")}><span className="path-item-icon"><Icon name="hand" size={24} /></span><span><strong>FSL Foundations</strong><small>Greetings and introductions</small></span><Icon name="compass" size={19} /></button>
+            <button className="learner-path-item path-item-coral" onClick={() => onNavigate("/scenarios")}><span className="path-item-icon"><Icon name="home" size={24} /></span><span><strong>Everyday conversations</strong><small>Practice at home and in your community</small></span><Icon name="compass" size={19} /></button>
+          </div>
+        </section>
+      </div>
+      <section className="learner-encouragement"><Icon name="heart" size={22} /><p><strong>Learning looks different for everyone.</strong> Go at your own pace. There's no wrong way to make progress.</p><button onClick={() => onNavigate("/progress")}>View my progress <span>→</span></button></section>
     </div>
   );
 }
@@ -494,11 +622,29 @@ function PathPreview({ icon, color, title, lessons: count, progress }) {
 
 function LearningPaths({ onNavigate }) {
   const [filter, setFilter] = useState("All paths");
-  const visibleLessons = lessons.filter((lesson) => filter === "All paths" || (filter === "In progress" && lesson.progress > 0) || (filter === "Not started" && lesson.progress === 0) || (filter === "Completed" && lesson.progress === 100));
+  const [paths, setPaths] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    api("/paths")
+      .then((result) => setPaths(result.paths))
+      .catch((error) => setLoadError(error.message))
+      .finally(() => setLoading(false));
+  }, []);
+  const visiblePaths = paths.filter((path) =>
+    filter === "All paths"
+    || (filter === "In progress" && path.progress > 0 && path.progress < 100)
+    || (filter === "Not started" && path.progress === 0)
+    || (filter === "Completed" && path.progress === 100),
+  );
   return <>
     <PageTitle eyebrow="LEARN AT YOUR OWN PACE" title="Learning paths" description="A little practice each day goes a long way. Find the path that feels right for you." action={<Button onClick={() => onNavigate("/practice")}><Icon name="hand" size={17} /> Quick practice</Button>} />
     <div className="filter-row">{["All paths", "In progress", "Not started", "Completed"].map((item) => <button key={item} className={`filter-chip ${filter === item ? "filter-active" : ""}`} onClick={() => setFilter(item)}>{item}</button>)}</div>
-    {visibleLessons.length ? <div className="learning-path-grid">{visibleLessons.map((lesson) => <article className="path-card" key={lesson.id}><div className={`path-card-art ${lesson.color}`}><span className="path-emoji">{lesson.icon}</span><span className="path-level">{lesson.level}</span><span className="path-sparkle">✦</span></div><div className="path-card-content"><span className="eyebrow">{lesson.unit}</span><h2>{lesson.title}</h2><p>{lesson.id === "greetings" ? "Start conversations with confidence using friendly greetings and introductions." : lesson.id === "introductions" ? "Share your name, feelings, and the things that make you, you." : "Learn the useful signs you'll reach for every day."}</p><div className="path-card-meta"><span>▤ {lesson.id === "greetings" ? "4" : "6"} bite-sized lessons</span><span>⏱ {lesson.minutes} min each</span></div><div className="path-card-progress"><ProgressBar value={lesson.progress} /><span>{lesson.progress ? `${lesson.progress}%` : "Not started"}</span></div><Button variant={lesson.progress ? "primary" : "outline"} onClick={() => onNavigate("/practice")}>{lesson.progress ? "Continue path" : "Start learning"} <span>→</span></Button></div></article>)}</div> : <div className="empty-state"><Icon name="sprout" size={34} /><h2>No paths in this group yet</h2><p>Your next learning adventure is just around the corner.</p></div>}
+    {loadError && <p className="inline-error">Could not load learning paths: {loadError}</p>}
+    {loading ? <div className="empty-state">Loading your learning paths…</div> : visiblePaths.length ? <div className="learning-path-grid">{visiblePaths.map((path, index) => {
+      const color = ["peach", "lavender", "yellow"][index % 3];
+      return <article className="path-card" key={path.id}><div className={`path-card-art ${color}`}><span className="path-emoji"><Icon name="bookOpen" size={42} /></span><span className="path-level">{path.level}</span><span className="path-sparkle">✦</span></div><div className="path-card-content"><span className="eyebrow">LEARNING PATH</span><h2>{path.title}</h2><p>{path.description || "Build confidence one lesson and one sign at a time."}</p><div className="path-card-meta"><span>▤ {path.lessons} bite-sized lessons</span></div><div className="path-card-progress"><ProgressBar value={path.progress} /><span>{path.progress ? `${path.progress}%` : "Not started"}</span></div><Button variant={path.progress ? "primary" : "outline"} onClick={() => onNavigate("/practice")}>{path.progress ? "Continue path" : "Start learning"} <span>→</span></Button></div></article>;
+    })}</div> : <div className="empty-state"><Icon name="sprout" size={34} /><h2>No paths in this group yet</h2><p>Your next learning adventure is just around the corner.</p></div>}
     <section className="encouragement-strip"><Icon name="sparkles" size={26} /><div><strong>Learning looks different for everyone.</strong><p>Go at your own pace. There's no wrong way to make progress.</p></div><button className="text-link" onClick={() => onNavigate("/help")}>Our approach →</button></section>
   </>;
 }
@@ -507,11 +653,22 @@ function Vocabulary() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All signs");
   const [saved, setSaved] = useState([]);
+  const [words, setWords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    api("/vocabulary")
+      .then((result) => setWords(result.words))
+      .catch((error) => setLoadError(error.message))
+      .finally(() => setLoading(false));
+  }, []);
+  const categories = ["All signs", ...new Set(words.map((item) => item.category))];
   const filtered = words.filter((item) => (category === "All signs" || item.category === category) && `${item.word} ${item.meaning}`.toLowerCase().includes(search.toLowerCase()));
   return <>
     <PageTitle eyebrow="A LITTLE WORD, A BIG CONNECTION" title="FSL vocabulary" description="Discover useful Filipino Sign Language signs and add your favorites to practice later." />
-    <div className="vocab-controls"><label className="search-field"><Icon name="search" size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search signs..." /><kbd>⌘ K</kbd></label><div className="filter-row">{["All signs", "Greetings", "Everyday", "People"].map((item) => <button key={item} className={`filter-chip ${category === item ? "filter-active" : ""}`} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
-    {filtered.length ? <div className="vocab-grid">{filtered.map((item) => <article className="vocab-card" key={item.word}><button className={`save-sign ${saved.includes(item.word) ? "saved" : ""}`} aria-label={`${saved.includes(item.word) ? "Unsave" : "Save"} ${item.word}`} onClick={() => setSaved((current) => current.includes(item.word) ? current.filter((word) => word !== item.word) : [...current, item.word])}>{saved.includes(item.word) ? "♥" : "♡"}</button><div className="vocab-emoji">{item.emoji}</div><span className="category-tag">{item.category}</span><h2>{item.word}</h2><p>{item.meaning}</p><small>{item.hint}</small><button className="vocab-practice" onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(item.word))}><Icon name="volume" size={16} /> Hear the word</button></article>)}</div> : <div className="empty-state"><Icon name="search" size={34} /><h2>No signs found</h2><p>Try a different search or category.</p></div>}
+    {loadError && <p className="inline-error">Could not load vocabulary: {loadError}</p>}
+    <div className="vocab-controls"><label className="search-field"><Icon name="search" size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search signs..." /><kbd>⌘ K</kbd></label><div className="filter-row">{categories.map((item) => <button key={item} className={`filter-chip ${category === item ? "filter-active" : ""}`} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
+    {loading ? <div className="empty-state">Loading vocabulary…</div> : filtered.length ? <div className="vocab-grid">{filtered.map((item) => <article className="vocab-card" key={item.word}><button className={`save-sign ${saved.includes(item.word) ? "saved" : ""}`} aria-label={`${saved.includes(item.word) ? "Unsave" : "Save"} ${item.word}`} onClick={() => setSaved((current) => current.includes(item.word) ? current.filter((word) => word !== item.word) : [...current, item.word])}>{saved.includes(item.word) ? "♥" : "♡"}</button><div className="vocab-emoji">{item.emoji || "🤟"}</div><span className="category-tag">{item.category}</span><h2>{item.word}</h2><p>{item.meaning}</p><small>{item.hint || "Practice this sign at your own pace."}</small><button className="vocab-practice" onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(item.word))}><Icon name="volume" size={16} /> Hear the word</button></article>)}</div> : <div className="empty-state"><Icon name="search" size={34} /><h2>No signs found</h2><p>Try a different search or category.</p></div>}
   </>;
 }
 
@@ -555,10 +712,25 @@ function Practice({ onToast }) {
 }
 
 function Scenarios({ onNavigate }) {
+  const [scenarios, setScenarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    api("/scenarios")
+      .then((result) => setScenarios(result.scenarios))
+      .catch((error) => setLoadError(error.message))
+      .finally(() => setLoading(false));
+  }, []);
   return <>
     <PageTitle eyebrow="LEARN BY LIVING IT" title="Choose a scenario" description="Practice useful signs in everyday moments. Pick a story and see where the conversation takes you." />
-    <div className="scenario-banner"><Icon name="message" size={25} /><div><strong>Real moments, real connection</strong><p>Each scenario is a safe space to try, make mistakes, and grow your confidence.</p></div><span className="scenario-count">3 stories <b>·</b> 5–10 min each</span></div>
-    <div className="scenario-grid">{scenarios.map((scenario) => <article className="scenario-card" key={scenario.title}><div className={`scenario-art ${scenario.color}`}><span>{scenario.emoji}</span><small>{scenario.tag}</small></div><div className="scenario-content"><span className="eyebrow">{scenario.tag.toUpperCase()} SCENARIO</span><h2>{scenario.title}</h2><p>{scenario.description}</p><div className="scenario-bottom"><span>⏱ 5–10 min <i>·</i> Beginner friendly</span><Button variant="outline" onClick={() => onNavigate("/activity")}>Start story <span>→</span></Button></div></div></article>)}</div>
+    {loadError && <p className="inline-error">Could not load scenarios: {loadError}</p>}
+    <div className="scenario-banner"><Icon name="message" size={25} /><div><strong>Real moments, real connection</strong><p>Each scenario is a safe space to try, make mistakes, and grow your confidence.</p></div><span className="scenario-count">{scenarios.length} stories <b>·</b> 5–10 min each</span></div>
+    {loading ? <div className="empty-state">Loading scenarios…</div> : scenarios.length ? <div className="scenario-grid">{scenarios.map((scenario, index) => {
+      const colors = ["peach", "lavender", "mint"];
+      const artwork = ["🏪", "🧑‍🤝‍🧑", "🍱"];
+      const tag = scenario.category || "Everyday life";
+      return <article className="scenario-card" key={scenario.id}><div className={`scenario-art ${scenario.color || colors[index % colors.length]}`}><span>{scenario.emoji || artwork[index % artwork.length]}</span><small>{tag}</small></div><div className="scenario-content"><span className="eyebrow">{tag.toUpperCase()} SCENARIO</span><h2>{scenario.title}</h2><p>{scenario.description || "Practice useful signs in a friendly everyday conversation."}</p><div className="scenario-bottom"><span>⏱ 5–10 min <i>·</i> Beginner friendly</span><Button variant="outline" onClick={() => onNavigate("/activity")}>Start story <span>→</span></Button></div></div></article>;
+    })}</div> : <div className="empty-state"><Icon name="message" size={34} /><h2>No scenarios available yet</h2><p>New practice stories will appear here when they are published.</p></div>}
     <div className="gentle-note"><Icon name="sprout" size={23} /><span>There's no pressure to get it perfect. This is your space to explore.</span></div>
   </>;
 }
@@ -642,31 +814,68 @@ function Progress() {
   </>;
 }
 
-function InstructorDashboard({ onNavigate }) {
+function InstructorDashboard({ user, onNavigate }) {
+  const [summary, setSummary] = useState(null);
+  const [roster, setRoster] = useState([]);
+  const [classrooms, setClassrooms] = useState([]);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    Promise.all([
+      api("/dashboard"),
+      api("/instructor/learners"),
+      api("/instructor/classrooms"),
+    ])
+      .then(([dashboardData, learnersData, classroomsData]) => {
+        setSummary(dashboardData);
+        setRoster(learnersData.learners.map((learner, index) => ({
+          ...learner,
+          initials: learner.name.split(" ").map((part) => part[0]).slice(0, 2).join(""),
+          color: ["coral", "blue", "purple", "gold"][index % 4],
+        })));
+        setClassrooms(classroomsData.classrooms);
+      })
+      .catch((error) => setLoadError(error.message));
+  }, []);
+
+  const firstName = user.name.split(" ")[0];
+
   return <>
-    <PageTitle eyebrow="YOUR CLASSROOM, AT A GLANCE" title={<>Good morning, Jamie! <Icon name="sun" size={22} /></>} description="A little encouragement goes a long way. Here's how your learners are doing this week." action={<Button onClick={() => onNavigate("/classrooms/create")}>＋ New classroom</Button>} />
-    <div className="stats-grid instructor-stats">
-      <StatCard icon="users" tone="lavender" label="Active learners" value="24" change="+3 this month" />
-      <StatCard icon="bookOpen" tone="mint" label="Lessons completed" value="186" change="+12 this week" />
-      <StatCard icon="hand" tone="peach" label="Signs practiced" value="842" change="Across all learners" />
-      <StatCard icon="star" tone="yellow" label="Class engagement" value="87%" change="↑ 8% from last week" />
-    </div>
-    <div className="instructor-grid">
-      <section className="panel">
-        <div className="panel-heading"><div><p className="eyebrow">YOUR PEOPLE</p><h2>Learner snapshots</h2></div><button className="text-link" onClick={() => onNavigate("/learners")}>All learners →</button></div>
-        <LearnerTable rows={learners.slice(0, 3)} onNavigate={onNavigate} />
+    <div className="instructor-dashboard">
+      <section className="instructor-hero">
+        <div><span className="dashboard-kicker">YOUR CLASSROOM, AT A GLANCE</span><h1>Welcome back, {firstName}.</h1><p>Small moments of encouragement can make a big difference. Here's what's happening in your learning community.</p></div>
+        <Button className="dashboard-button-yellow" onClick={() => onNavigate("/classrooms/create")}>＋ Create a classroom</Button>
       </section>
-      <section className="panel classroom-summary">
-        <div className="panel-heading"><div><p className="eyebrow">LEARN TOGETHER</p><h2>Virtual classrooms</h2></div></div>
-        <div className="classroom-feature"><Icon name="home" size={21} /><div><strong>Sunshine Sign Stars</strong><small>12 learners · created Sep 8</small></div><span className="room-status">ACTIVE</span></div>
-        <div className="classroom-feature"><Icon name="school" size={21} /><div><strong>Little Language Club</strong><small>8 learners · created Aug 22</small></div><span className="room-status">ACTIVE</span></div>
-        <Button variant="outline" className="full-button" onClick={() => onNavigate("/classrooms")}>Manage classrooms <span>→</span></Button>
-      </section>
-      <section className="panel instructor-activity">
-        <div className="panel-heading"><div><p className="eyebrow">YOUR CLASS AT A GLANCE</p><h2>Weekly activity</h2></div><select className="select-compact" aria-label="Activity time period"><option>This week</option><option>This month</option></select></div>
-        <div className="large-chart">{[48,65,41,90,58,77,32].map((value,index)=><div key={index}><span className="large-chart-bar" style={{height:`${value}%`}}/><small>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</small></div>)}</div>
-      </section>
-      <section className="tip-card"><Icon name="lightbulb" size={25} /><p className="eyebrow">A GENTLE REMINDER</p><h2>Celebrate the effort, not just the answer.</h2><p>Every attempt is a brave step toward better communication. Your encouragement matters.</p><button className="text-link" onClick={() => onNavigate("/help")}>More teaching tips →</button></section>
+      {loadError && <p className="inline-error" role="alert">Could not load your classroom overview: {loadError}</p>}
+      <div className="dashboard-metrics instructor-metrics">
+        <StatCard icon="users" tone="blue" label="Learners" value={summary ? roster.length : "—"} change="In your learning community" />
+        <StatCard icon="school" tone="yellow" label="Classrooms" value={summary ? summary.classrooms : "—"} change="Spaces to learn together" />
+        <StatCard icon="bookOpen" tone="coral" label="Lessons completed" value={summary ? summary.lessons_completed : "—"} change="Across your account" />
+        <StatCard icon="heart" tone="mint" label="Learners to encourage" value={summary ? roster.filter((learner) => learner.accuracy < 85).length : "—"} change="A kind check-in can help" />
+      </div>
+      <div className="instructor-dashboard-grid">
+        <section className="dashboard-card instructor-roster-card">
+          <div className="dashboard-card-heading"><div><p className="dashboard-kicker">YOUR PEOPLE</p><h2>Learner snapshots</h2></div><button className="dashboard-inline-link" onClick={() => onNavigate("/learners")}>All learners <span>→</span></button></div>
+          {roster.length > 0
+            ? <LearnerTable rows={roster.slice(0, 4)} onNavigate={onNavigate} />
+            : !loadError && <p className="dashboard-loading">Loading your learner roster…</p>}
+        </section>
+        <section className="dashboard-card instructor-classrooms-card">
+          <div className="dashboard-card-heading"><div><p className="dashboard-kicker">LEARN TOGETHER</p><h2>Your classrooms</h2></div><span className="classroom-card-mark"><Icon name="school" size={22} /></span></div>
+          {classrooms.length ? classrooms.slice(0, 3).map((classroom) => (
+            <div className="dashboard-classroom" key={classroom.id}><span className="classroom-mark"><Icon name="home" size={19} /></span><span><strong>{classroom.name}</strong><small>{classroom.student_count} learners · {classroom.code}</small></span><Icon name="compass" size={18} /></div>
+          )) : !loadError && <p className="dashboard-loading">Loading your classrooms…</p>}
+          {classrooms.length === 0 && !loadError && summary?.classrooms === 0 && <p className="classroom-empty">Your first classroom is just a little step away.</p>}
+          <Button variant="outline" className="full-button" onClick={() => onNavigate("/classrooms")}>Manage classrooms <span>→</span></Button>
+        </section>
+        <section className="dashboard-card instructor-next-step">
+          <span className="instructor-next-icon"><Icon name="lightbulb" size={26} /></span>
+          <p className="dashboard-kicker">A GENTLE REMINDER</p>
+          <h2>Celebrate the effort, not just the answer.</h2>
+          <p>Every attempt is a brave step toward better communication. Your encouragement matters.</p>
+          <button className="dashboard-inline-link" onClick={() => onNavigate("/help")}>More teaching tips <span>→</span></button>
+        </section>
+      </div>
     </div>
   </>;
 }
@@ -677,7 +886,7 @@ function LearnerTable({ rows, onNavigate }) {
 
 function LearnerManagement({ onNavigate }) {
   const [search, setSearch] = useState("");
-  const [roster, setRoster] = useState(learners);
+  const [roster, setRoster] = useState([]);
   const [loadError, setLoadError] = useState("");
   useEffect(() => {
     api("/instructor/learners").then((result) => setRoster(result.learners)).catch((error) => setLoadError(error.message));
@@ -688,9 +897,31 @@ function LearnerManagement({ onNavigate }) {
 
 function LearnerDetails() {
   const { id } = useParams();
-  const learnerId = Number(id);
-  const learner = learners.find((person) => person.id === learnerId) || learners[0];
-  return <><PageTitle eyebrow="LEARNER PROFILE" title={learner.name} description={`A closer look at ${learner.name.split(" ")[0]}'s learning journey.`} action={<span className="soft-tag">● Active today</span>} /><div className="learner-detail-hero panel"><span className={`avatar avatar-large avatar-${learner.color}`}>{learner.initials}</span><div><h2>{learner.name}</h2><p>Age {learner.age} · {learner.level} level · Sunshine Sign Stars</p></div><Button variant="outline" onClick={() => window.print()}>↓ Export summary</Button></div><div className="stats-grid"><StatCard icon="bookOpen" tone="lavender" label="Lessons completed" value={learner.lessons} change="Since joining" /><StatCard icon="hand" tone="peach" label="Sign accuracy" value={`${learner.accuracy}%`} change="Across recent practice" /><StatCard icon="flame" tone="yellow" label="Current streak" value={`${learner.streak} days`} change="Best: 9 days" /><StatCard icon="sprout" tone="mint" label="Current level" value={learner.level} change="Making steady progress" /></div><div className="progress-content-grid"><section className="panel"><p className="eyebrow">GROWING EVERY WEEK</p><h2>Recent activity</h2><div className="timeline"><div><i className="timeline-dot mint" /><span><strong>Completed “Greetings & introductions”</strong><small>Today · 8 min · 92% practice confidence</small></span></div><div><i className="timeline-dot peach" /><span><strong>Practiced 6 new vocabulary signs</strong><small>Yesterday · FSL Foundations</small></span></div><div><i className="timeline-dot lavender" /><span><strong>Earned the “Early bird” badge</strong><small>Monday · 8:42 am</small></span></div></div></section><section className="panel"><p className="eyebrow">A LITTLE ENCOURAGEMENT</p><h2>Strengths & next steps</h2><div className="insight-row"><Icon name="star" size={20} /><div><strong>Strong with greetings</strong><small>Consistent practice and growing confidence.</small></div></div><div className="insight-row"><Icon name="sprout" size={20} /><div><strong>Ready for everyday signs</strong><small>Try the next vocabulary set together.</small></div></div><Button variant="outline" className="full-button">Send a kind note</Button></section></div></>;
+  const [learner, setLearner] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    let active = true;
+    setLearner(null);
+    setEvents([]);
+    setLoadError("");
+    api(`/instructor/learners/${id}`)
+      .then((result) => {
+        if (!active) return;
+        setLearner(result.learner);
+        setEvents(result.events || []);
+      })
+      .catch((error) => {
+        if (active) setLoadError(error.message);
+      });
+    return () => { active = false; };
+  }, [id]);
+
+  if (loadError) return <><PageTitle eyebrow="LEARNER PROFILE" title="Learner details" /><p className="inline-error">Could not load this learner: {loadError}</p></>;
+  if (!learner) return <div className="empty-state">Loading learner details…</div>;
+
+  const initials = learner.name.split(" ").map((part) => part[0]).slice(0, 2).join("");
+  return <><PageTitle eyebrow="LEARNER PROFILE" title={learner.name} description={`A closer look at ${learner.name.split(" ")[0]}'s learning journey.`} action={<span className="soft-tag">CLASSROOM LEARNER</span>} /><div className="learner-detail-hero panel"><span className="avatar avatar-large avatar-mint">{initials}</span><div><h2>{learner.name}</h2><p>{learner.level} level · Joined through your classroom</p></div><Button variant="outline" onClick={() => window.print()}>↓ Export summary</Button></div><div className="stats-grid"><StatCard icon="bookOpen" tone="lavender" label="Completed activities" value={learner.lessons} change="Since joining" /><StatCard icon="hand" tone="peach" label="Practice accuracy" value={`${learner.accuracy}%`} change="Across completed activities" /><StatCard icon="flame" tone="yellow" label="Current streak" value={`${learner.streak} days`} change="Streak tracking coming soon" /><StatCard icon="sprout" tone="mint" label="Current level" value={learner.level} change="Making steady progress" /></div><div className="progress-content-grid"><section className="panel"><p className="eyebrow">GROWING EVERY WEEK</p><h2>Recent activity</h2>{events.length ? <div className="timeline">{events.map((event, index) => <div key={`${event.activity}-${event.created_at}-${index}`}><i className={`timeline-dot ${["mint", "peach", "lavender"][index % 3]}`} /><span><strong>{event.activity} · {event.score}%</strong><small>{new Date(event.created_at).toLocaleString()}</small></span></div>)}</div> : <p>No completed activities yet. Their progress will appear here as they practice.</p>}</section><section className="panel"><p className="eyebrow">A LITTLE ENCOURAGEMENT</p><h2>Strengths & next steps</h2><div className="insight-row"><Icon name="star" size={20} /><div><strong>Keep celebrating each try</strong><small>Consistent practice helps build confidence.</small></div></div><div className="insight-row"><Icon name="sprout" size={20} /><div><strong>Explore a new sign together</strong><small>Small steps make a meaningful difference.</small></div></div><Button variant="outline" className="full-button">Send a kind note</Button></section></div></>;
 }
 
 function Classrooms({ onNavigate }) {
@@ -784,27 +1015,18 @@ function CreateClassroom({ onNavigate, onToast }) {
       return <><PageTitle eyebrow="THIS IS YOUR SPACE" title="My profile" description="Make your learning space feel a little more like you." /><form className="profile-form panel" onSubmit={(event) => { event.preventDefault(); onSave({ name: name.trim() || user.name, learner_type: age, learning_goal: goal }); }}><div className="profile-edit-head"><span className="avatar avatar-large avatar-mint">{name.split(" ").map((part) => part[0]).slice(0, 2).join("") || "AR"}</span><div><h2>{name || "Your name"}</h2><p>Explorer · Joined this year</p></div><button type="button" className="button button-outline" onClick={() => document.getElementById("profile-name")?.focus()}>Edit details</button></div><div className="profile-fields"><label>Display name<input id="profile-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={70} /></label><label>Email address<input type="email" value={user.email || ""} readOnly /></label><label>Learning as<select value={age} onChange={(event) => setAge(event.target.value)}><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Everyday conversations</option><option>Connect with family</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label></div><div className="form-actions"><Link className="text-link" to="/settings">Account settings →</Link><Button type="submit">Save changes</Button></div></form></>;
     }
 
-    function Settings({ settings, setSettings, onToast }) {
+    function Settings({ settings, setSettings, onSave, onToast }) {
       const toggle = (key) => {
         const next = { ...settings, [key]: !settings[key] };
         setSettings(next);
         localStorage.setItem("talinturo-settings", JSON.stringify(next));
       };
-      const updateColor = (key, value) => {
-        const next = { ...settings, [key]: value };
+      const updateTheme = (themeMode) => {
+        const next = { ...settings, themeMode };
         setSettings(next);
         localStorage.setItem("talinturo-settings", JSON.stringify(next));
       };
-      return <><PageTitle eyebrow="MAKE IT YOUR OWN" title="Settings" description="A few little choices to make learning feel just right for you." /><div className="settings-layout"><section className="panel settings-panel theme-panel"><p className="eyebrow">YOUR LOOK & FEEL</p><h2>Make your own theme</h2><p className="theme-description">Choose colors for your interface and text. Your changes apply right away and are saved on this device.</p><div className="theme-colors">
-        <ThemeColor title="Accent color" text="Buttons, links, and highlights" value={settings.themeAccent} onChange={(value) => updateColor("themeAccent", value)} />
-        <ThemeColor title="Page background" text="The app's canvas" value={settings.themeBackground} onChange={(value) => updateColor("themeBackground", value)} />
-        <ThemeColor title="Main text" text="Headings and primary text" value={settings.themeText} onChange={(value) => updateColor("themeText", value)} />
-        <ThemeColor title="Secondary text" text="Supporting text and labels" value={settings.themeMuted} onChange={(value) => updateColor("themeMuted", value)} />
-      </div><div className="theme-preview" style={{ "--preview-accent": settings.themeAccent, "--preview-background": settings.themeBackground, "--preview-text": settings.themeText, "--preview-shadow": textShadow(settings.themeText, settings.themeBackground), "--preview-muted-shadow": textShadow(settings.themeMuted, settings.themeBackground) }}><div className="theme-preview-mark">t</div><div><strong>Your theme preview</strong><small>A little glimpse of your new look</small></div><button type="button">Sample button</button></div></section><section className="panel settings-panel"><p className="eyebrow">YOUR EXPERIENCE</p><h2>Learning preferences</h2><SettingRow title="Gentle practice reminders" text="A friendly nudge to help you keep your learning streak." checked={settings.reminders} onChange={() => toggle("reminders")} /><SettingRow title="Sound effects" text="Play a little sound when you finish an activity." checked={settings.sound} onChange={() => toggle("sound")} /><SettingRow title="Reduce motion" text="Use fewer animations throughout the app." checked={settings.reducedMotion} onChange={() => toggle("reducedMotion")} /></section><section className="panel settings-panel"><p className="eyebrow">KEEP IN THE LOOP</p><h2>Email updates</h2><SettingRow title="Weekly learning summary" text="A quick recap of your progress and little wins." checked={settings.weekly} onChange={() => toggle("weekly")} /><div className="setting-danger"><div><strong>Need a fresh start?</strong><small>Reset your local practice activity. Your account stays safe.</small></div><button onClick={() => onToast("Progress reset is not available in this demo.")}>Reset practice data</button></div></section><div className="settings-footer"><span>Preferences are saved on this device.</span><button className="button button-outline" onClick={() => { localStorage.setItem("talinturo-settings", JSON.stringify(settings)); onToast("Your preferences have been saved."); }}>Save preferences</button></div></div></>;
-    }
-
-    function ThemeColor({ title, text, value, onChange }) {
-      return <label className="theme-color-control"><span><strong>{title}</strong><small>{text}</small></span><span className="theme-color-input"><input type="color" value={value} aria-label={title} onChange={(event) => onChange(event.target.value)} /><code>{value.toUpperCase()}</code></span></label>;
+      return <><PageTitle eyebrow="MAKE IT YOUR OWN" title="Settings" description="A few little choices to make learning feel just right for you." /><div className="settings-layout"><section className="panel settings-panel theme-panel"><p className="eyebrow">YOUR LOOK & FEEL</p><h2>Appearance</h2><p className="theme-description">Choose light or dark. Save your preferences to sync this choice across devices.</p><div className="appearance-options" role="group" aria-label="Color theme"><button type="button" className={`appearance-option ${settings.themeMode === "light" ? "appearance-option-active" : ""}`} aria-pressed={settings.themeMode === "light"} onClick={() => updateTheme("light")}><Icon name="sun" size={21} /><span><strong>Light</strong><small>Bright and welcoming</small></span></button><button type="button" className={`appearance-option ${settings.themeMode === "dark" ? "appearance-option-active" : ""}`} aria-pressed={settings.themeMode === "dark"} onClick={() => updateTheme("dark")}><Icon name="moon" size={21} /><span><strong>Dark</strong><small>Easy on the eyes</small></span></button></div></section><section className="panel settings-panel"><p className="eyebrow">YOUR EXPERIENCE</p><h2>Learning preferences</h2><SettingRow title="Gentle practice reminders" text="A friendly nudge to help you keep your learning streak." checked={settings.reminders} onChange={() => toggle("reminders")} /><SettingRow title="Sound effects" text="Play a little sound when you finish an activity." checked={settings.sound} onChange={() => toggle("sound")} /><SettingRow title="Reduce motion" text="Use fewer animations throughout the app." checked={settings.reducedMotion} onChange={() => toggle("reducedMotion")} /></section><section className="panel settings-panel"><p className="eyebrow">KEEP IN THE LOOP</p><h2>Email updates</h2><SettingRow title="Weekly learning summary" text="A quick recap of your progress and little wins." checked={settings.weekly} onChange={() => toggle("weekly")} /><div className="setting-danger"><div><strong>Need a fresh start?</strong><small>Reset your local practice activity. Your account stays safe.</small></div><button onClick={() => onToast("Progress reset is not available in this demo.")}>Reset practice data</button></div></section><div className="settings-footer"><span>Save to your account to sync preferences across devices.</span><button className="button button-outline" onClick={() => onSave(settings)}>Save preferences</button></div></div></>;
     }
 
     function SettingRow({ title, text, checked, onChange }) {
@@ -841,26 +1063,22 @@ function CreateClassroom({ onNavigate, onToast }) {
           setLoading(false);
         }
       };
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sparkles" size={24} /></span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" onClick={() => window.location.assign("/api/auth/google")}>◎ Continue with Google</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google sign-in securely authenticates through Google.</p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="hand" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sparkles" size={24} /></span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" onClick={() => window.location.assign(`/api/auth/google?flow=${mode}`)}>◎ {isSignup ? "Sign up with Google" : "Continue with Google"}</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google securely verifies your email. {isSignup ? "Your account will be created after verification." : "Use the Google account linked to your Talinturo account."}</p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="hand" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function ForgotPassword({ onToast }) {
       const [email, setEmail] = useState("");
       const [sent, setSent] = useState(false);
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="mail" size={24} /></span><p className="eyebrow">A FRESH START</p><h1>{sent ? "Password reset isn't connected yet." : "Forgot your password?"}</h1><p className="auth-description">{sent ? "This local demo has no email delivery configured. Contact your administrator to reset your account." : "It happens! Enter your email to check the reset flow. Email delivery needs to be configured before a link can be sent."}</p>{sent ? <Button className="full-button" onClick={() => window.location.assign("/login")}>Back to sign in</Button> : <form onSubmit={(event) => { event.preventDefault(); setSent(true); }}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><Button className="full-button" type="submit">Continue <span>→</span></Button></form>}<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="sprout" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>One little step<br />at a time.</h2><p>Your learning journey will be right here when you return.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="mail" size={24} /></span><p className="eyebrow">A FRESH START</p><h1>{sent ? "Password reset isn't connected yet." : "Forgot your password?"}</h1><p className="auth-description">{sent ? "This local demo has no email delivery configured. Contact your administrator to reset your account." : "It happens! Enter your email to check the reset flow. Email delivery needs to be configured before a link can be sent."}</p>{sent ? <Button className="full-button" onClick={() => window.location.assign("/login")}>Back to sign in</Button> : <form onSubmit={(event) => { event.preventDefault(); setSent(true); }}><label>Email address<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><Button className="full-button" type="submit">Continue <span>→</span></Button></form>}<p className="auth-switch"><Link to="/login">← Back to sign in</Link></p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="sprout" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>One little step<br />at a time.</h2><p>Your learning journey will be right here when you return.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function ResetPassword() {
       return <section className="not-found panel"><Icon name="lock" size={44} /><p className="eyebrow">ACCOUNT RECOVERY</p><h1>Password reset isn't configured.</h1><p>This local demo has no email delivery or reset-token service. Ask your administrator for help, or return to sign in.</p><Link className="button button-primary" to="/login">Back to sign in <span>→</span></Link></section>;
     }
 
-    function WelcomePage() {
-      return <section className="landing-page"><span className="welcome-label"><span>✦</span> WELCOME TO TALINTURO</span><h1>Small signs.<br /><span>Big connections.</span></h1><p>A welcoming place to explore Filipino Sign Language. Learn at your own pace, practice everyday moments, and celebrate every little win.</p><div className="landing-art" aria-hidden="true"><span><Icon name="hand" size={48} /></span><i>✦</i><b><Icon name="sprout" size={26} /></b></div><div className="landing-actions"><Link className="button button-primary" to="/signup">Start learning <span>→</span></Link><Link className="button button-outline" to="/login">I have an account</Link></div><small>Made for learners, families & educators</small></section>;
-    }
-
     function ProfileSetup({ onDone }) {
       const [goal, setGoal] = useState("Connect with family");
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><span className="brand-mark">t<span><Icon name="sparkles" size={17} /></span></span><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sprout" size={24} /></span><p className="eyebrow">LET'S MAKE THIS YOURS</p><h1>What brings you here?</h1><p className="auth-description">We'll use this to make your learning journey feel a little more personal.</p><form onSubmit={(event) => { event.preventDefault(); onDone(); }}><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Connect with family</option><option>Everyday conversations</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label><label>I'm learning as<select defaultValue="Adult learner"><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><Button className="full-button" type="submit">Let's get started <span>→</span></Button></form><button className="skip-setup" onClick={onDone}>I'll do this later</button></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="globe" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Your story.<br />Your pace.</h2><p>There is no one way to learn. We'll meet you right where you are.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sprout" size={24} /></span><p className="eyebrow">LET'S MAKE THIS YOURS</p><h1>What brings you here?</h1><p className="auth-description">We'll use this to make your learning journey feel a little more personal.</p><form onSubmit={(event) => { event.preventDefault(); onDone(); }}><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Connect with family</option><option>Everyday conversations</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label><label>I'm learning as<select defaultValue="Adult learner"><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><Button className="full-button" type="submit">Let's get started <span>→</span></Button></form><button className="skip-setup" onClick={onDone}>I'll do this later</button></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="globe" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Your story.<br />Your pace.</h2><p>There is no one way to learn. We'll meet you right where you are.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function NotFound({ onNavigate }) {

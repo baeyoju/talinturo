@@ -1,6 +1,6 @@
 # Talinturo
 
-Talinturo is a gamified Filipino Sign Language (FSL) learning app for learners, families, and educators. It pairs a responsive React interface with a Python Flask API and a local SQLite database.
+Talinturo is a gamified Filipino Sign Language (FSL) learning app for learners, families, and educators. It pairs a responsive React interface with a Python Flask API and PostgreSQL or a local SQLite database.
 
 > **Status:** Working development MVP. Sample lessons, learner records, and classroom data demonstrate the experience; they are not production learning content or records.
 
@@ -16,7 +16,7 @@ Talinturo is a gamified Filipino Sign Language (FSL) learning app for learners, 
 - React and JavaScript, with React Router
 - Vite development server and production build
 - Python and Flask, with Flask-CORS
-- SQLite for local development data
+- PostgreSQL for shared backend data, with SQLite available for local development and tests
 
 The current app **does not** include MediaPipe tracking, a Random Forest classifier, YOLO object detection, or camera-based sign recognition. The camera feature is a local preview only; it does not record or upload video. These recognition technologies are possible future work, not part of the current implementation.
 
@@ -26,10 +26,11 @@ The current app **does not** include MediaPipe tracking, a Random Forest classif
 React app (Vite)
       │  /api requests
       ▼
-Flask API ─── SQLite
+Flask API ─── PostgreSQL
+         └── SQLite (local fallback)
 ```
 
-In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. The API creates a local SQLite database and seeds sample demo data on its first start.
+In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Set `DATABASE_URL` to use the PostgreSQL schema; without it, the API creates a local SQLite database and seeds demo data. See [SETUP.md](SETUP.md) for database configuration.
 
 ## Project layout
 
@@ -53,6 +54,7 @@ talinturo/
 ## Documentation
 
 - [Setup and local development](SETUP.md) — prerequisites, install/run steps, demo accounts, tests, and local configuration.
+- [Environment variables](ENVIRONMENT.md) — backend database, session, and Google sign-in configuration.
 - [Development log](DEVELOPMENT_LOG.md) — implementation summary, validation, and follow-up work.
 
 ## FSL and privacy
