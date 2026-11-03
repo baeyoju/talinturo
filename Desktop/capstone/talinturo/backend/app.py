@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import sqlite3
+from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
 
@@ -27,9 +28,9 @@ BASE_DIR = Path(__file__).resolve().parent
 DATABASE = Path(os.environ.get("TALINTURO_DATABASE", BASE_DIR / "talinturo.sqlite3"))
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
-DEMO_MODE = os.environ.get("TALINTURO_DEMO_MODE", "true").lower() == "true"
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+DEMO_MODE = os.environ.get("TALINTURO_DEMO_MODE", "false").lower() == "true"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "891095864902-1ob6kdlui6v169tt3mnalovd074qeto8.apps.googleusercontent.com")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "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")
 GOOGLE_REDIRECT_URI = os.environ.get(
     "GOOGLE_REDIRECT_URI", "http://127.0.0.1:5173/api/auth/google/callback"
 )
@@ -130,6 +131,7 @@ def require_postgres_schema(db):
         "achievements",
         "user_achievements",
         "user_preferences",
+        "user_vocabulary_favorites",
     }
     rows = db.execute(
         "SELECT table_name FROM information_schema.tables "
@@ -140,118 +142,43 @@ def require_postgres_schema(db):
     if missing_tables:
         raise RuntimeError(
             "The PostgreSQL public schema is missing required tables: "
-            f"{', '.join(missing_tables)}. Run the Talinturo schema SQL before starting the API."
+            f"{', '.join(missing_tables)}. Restore backend/talinturo.sql and apply "
+            "backend/talinturo_backend_migration.sql before starting the API."
         )
-
-
-def seed_postgres_demo_data(db):
-    demo_users = (
-        ("Jamie Santos", "teacher@example.com", "instructor"),
-        ("Alex Rivera", "learner@example.com", "learner"),
-    )
-    user_ids = {}
-    for name, email, role in demo_users:
-        user = db.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
-        if user is None:
-            salt, password_hash = hash_password("Talinturo2025!")
-            salt, password_hash = stored_password_values(salt, password_hash)
-            user_id = insert_id(
-                db,
-                "INSERT INTO users(name, email, password_salt, password_hash, role) "
-                "VALUES(?, ?, ?, ?, ?)",
-                (name, email, salt, password_hash, role),
-            )
-        else:
-            user_id = user["id"]
-        user_ids[email] = user_id
-
-    classroom = db.execute(
-        "SELECT id FROM classrooms WHERE instructor_id = ? AND invite_code = ?",
-        (user_ids["teacher@example.com"], "SUNNY24"),
-    ).fetchone()
-    if classroom is None:
-        classroom_id = insert_id(
-            db,
-            "INSERT INTO classrooms(instructor_id, name, description, invite_code) "
-            "VALUES(?, ?, ?, ?)",
-            (
-                user_ids["teacher@example.com"],
-                "Sunshine Sign Stars",
-                "A friendly place to learn together.",
-                "SUNNY24",
-            ),
+    required_columns = {
+        "users": {"id", "name", "email", "password_salt", "password_hash", "role", "learner_type", "learning_goal"},
+        "oauth_accounts": {"provider", "subject", "user_id"},
+        "user_preferences": {"user_id", "theme_mode", "reminders", "sound", "reduced_motion", "weekly_summary"},
+        "classrooms": {"id", "instructor_id", "name", "invite_code", "is_active", "created_at"},
+        "classroom_memberships": {"id", "classroom_id", "user_id", "invited_name", "invited_email", "status", "created_at"},
+        "learning_paths": {"id", "title", "description", "level", "sort_order", "is_published"},
+        "lessons": {"id", "path_id", "title", "description", "duration_minutes", "content", "sort_order", "is_published"},
+        "activities": {"id", "slug", "activity_type", "title", "content", "sort_order", "is_published"},
+        "vocabulary_signs": {"id", "word", "meaning", "category", "hint", "media_url", "is_published"},
+        "activity_attempts": {"activity_id", "user_id", "score", "status", "response", "completed_at"},
+        "lesson_progress": {"user_id", "lesson_id", "progress_percent", "updated_at"},
+        "achievements": {"id", "title", "description", "criteria", "sort_order", "is_published"},
+        "user_achievements": {"user_id", "achievement_id", "earned_at"},
+        "user_vocabulary_favorites": {"user_id", "vocabulary_sign_id"},
+    }
+    column_rows = db.execute(
+        "SELECT table_name, column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public'"
+    ).fetchall()
+    existing_columns = {}
+    for row in column_rows:
+        existing_columns.setdefault(row["table_name"], set()).add(row["column_name"])
+    missing_columns = [
+        f"{table}.{column}"
+        for table, columns in required_columns.items()
+        for column in sorted(columns - existing_columns.get(table, set()))
+    ]
+    if missing_columns:
+        raise RuntimeError(
+            "The PostgreSQL schema is missing required columns: "
+            f"{', '.join(missing_columns)}. Apply backend/talinturo_backend_migration.sql "
+            "before starting the API."
         )
-    else:
-        classroom_id = classroom["id"]
-
-    db.execute(
-        "INSERT INTO classroom_memberships(classroom_id, user_id, status, joined_at) "
-        "VALUES(?, ?, 'active', now()) ON CONFLICT (classroom_id, user_id) "
-        "WHERE user_id IS NOT NULL DO NOTHING",
-        (classroom_id, user_ids["learner@example.com"]),
-    )
-
-    db.execute(
-        "INSERT INTO learning_paths(slug, title, description, level, sort_order, is_published) "
-        "VALUES('fsl-foundations', 'FSL Foundations', "
-        "'Start conversations with friendly everyday signs.', 'Beginner', 1, TRUE) "
-        "ON CONFLICT(slug) DO NOTHING"
-    )
-    path = db.execute(
-        "SELECT id FROM learning_paths WHERE slug = 'fsl-foundations'"
-    ).fetchone()
-    starter_lessons = (
-        ("kumusta-hello", "Kumusta! Let's say hello", 8),
-        ("all-about-me", "All about me", 12),
-        ("everyday-essentials", "Everyday essentials", 10),
-    )
-    for order, (slug, title, duration) in enumerate(starter_lessons, start=1):
-        db.execute(
-            "INSERT INTO lessons(path_id, slug, title, duration_minutes, sort_order, is_published) "
-            "VALUES(?, ?, ?, ?, ?, TRUE) ON CONFLICT(slug) DO NOTHING",
-            (path["id"], slug, title, duration, order),
-        )
-
-    starter_words = (
-        ("kumusta", "Kumusta", "Hello / How are you?", "Greetings", "A friendly greeting to start a conversation."),
-        ("salamat", "Salamat", "Thank you", "Everyday", "Show gratitude with this everyday sign."),
-        ("pamilya", "Pamilya", "Family", "People", "Talk about the people closest to you."),
-        ("kaibigan", "Kaibigan", "Friend", "People", "Someone you enjoy spending time with."),
-        ("tubig", "Tubig", "Water", "Everyday", "A useful sign for asking for a drink."),
-        ("paalam", "Paalam", "Goodbye", "Greetings", "A warm way to end a conversation."),
-    )
-    for slug, word, meaning, category, hint in starter_words:
-        db.execute(
-            "INSERT INTO vocabulary_signs(slug, word, meaning, category, hint, is_published) "
-            "VALUES(?, ?, ?, ?, ?, TRUE) ON CONFLICT(slug) DO NOTHING",
-            (slug, word, meaning, category, hint),
-        )
-
-    starter_scenarios = (
-        ("at-the-sari-sari-store", "At the sari-sari store", "Everyday life", "Practice asking for what you need in a friendly neighborhood shop.", "🏪", "peach"),
-        ("meeting-a-new-friend", "Meeting a new friend", "Social", "Introduce yourself and learn a little about someone new.", "🧑‍🤝‍🧑", "lavender"),
-        ("lunchtime-at-school", "Lunchtime at school", "School", "Share what you like and ask a classmate a question.", "🍱", "mint"),
-    )
-    for order, (slug, title, category, description, emoji, color) in enumerate(starter_scenarios, start=1):
-        db.execute(
-            "INSERT INTO activities"
-            "(slug, activity_type, title, content, sort_order, is_published) "
-            "VALUES(?, 'scenario', ?, ?, ?, TRUE) ON CONFLICT(slug) DO NOTHING",
-            (
-                slug,
-                title,
-                Jsonb(
-                    {
-                        "category": category,
-                        "description": description,
-                        "emoji": emoji,
-                        "color": color,
-                    }
-                ),
-                order,
-            ),
-        )
-    db.commit()
 
 
 def initialize_database():
@@ -259,8 +186,6 @@ def initialize_database():
         with app.app_context():
             db = get_db()
             require_postgres_schema(db)
-            if DEMO_MODE:
-                seed_postgres_demo_data(db)
         return
 
     with app.app_context():
@@ -325,7 +250,7 @@ def initialize_database():
             db.execute("ALTER TABLE users ADD COLUMN learner_type TEXT NOT NULL DEFAULT 'Adult learner'")
         if "learning_goal" not in user_columns:
             db.execute("ALTER TABLE users ADD COLUMN learning_goal TEXT NOT NULL DEFAULT 'Everyday conversations'")
-        if db.execute("SELECT id FROM users LIMIT 1").fetchone() is None:
+        if DEMO_MODE and db.execute("SELECT id FROM users LIMIT 1").fetchone() is None:
             salt, password_hash = hash_password("Talinturo2025!")
             teacher_id = db.execute(
                 "INSERT INTO users(name, email, password_salt, password_hash, role) VALUES(?, ?, ?, ?, ?)",
@@ -354,6 +279,64 @@ def initialize_database():
 
 def json_error(message, status):
     return jsonify({"error": message}), status
+
+
+def postgres_data_required():
+    if USE_POSTGRES:
+        return None
+    return (
+        jsonify(
+            {
+                "error": "PostgreSQL is required for learning content and progress data.",
+                "missing_data": [
+                    {
+                        "table": "DATABASE_URL",
+                        "records": "Configure a PostgreSQL connection in the backend environment.",
+                    }
+                ],
+            }
+        ),
+        503,
+    )
+
+
+def postgres_missing_records(db, table_queries):
+    missing = []
+    for table, query, parameters, message in table_queries:
+        count = db.execute(query, parameters).fetchone()["total"]
+        if count == 0:
+            missing.append({"table": table, "records": message})
+    return missing
+
+
+def activity_streak(db, user_id):
+    rows = db.execute(
+        """
+        SELECT active_date
+        FROM (
+            SELECT completed_at::date AS active_date
+            FROM activity_attempts
+            WHERE user_id = ? AND status = 'completed'
+              AND completed_at >= CURRENT_DATE - INTERVAL '365 days'
+            UNION
+            SELECT updated_at::date AS active_date
+            FROM lesson_progress
+            WHERE user_id = ? AND progress_percent >= 100
+              AND updated_at >= CURRENT_DATE - INTERVAL '365 days'
+        ) recent_activity
+        ORDER BY active_date DESC
+        """,
+        (user_id, user_id),
+    ).fetchall()
+    active_dates = {row["active_date"] for row in rows}
+    current_day = date.today()
+    if current_day not in active_dates:
+        current_day -= timedelta(days=1)
+    streak = 0
+    while current_day in active_dates:
+        streak += 1
+        current_day -= timedelta(days=1)
+    return streak
 
 
 def login_required(view):
@@ -386,6 +369,7 @@ def public_user(row):
         "role": row["role"],
         "learner_type": row["learner_type"] or "Adult learner",
         "learning_goal": row["learning_goal"] or "Everyday conversations",
+        "created_at": row["created_at"],
     }
 
 
@@ -507,6 +491,8 @@ def demo_login():
         return json_error("Choose a valid demo role.", 400)
     email = "teacher@example.com" if role == "instructor" else "learner@example.com"
     user = get_db().execute("SELECT * FROM users WHERE lower(email) = ?", (email,)).fetchone()
+    if user is None:
+        return json_error("No demo account is provisioned in this database.", 404)
     session.clear()
     session["user_id"] = user["id"]
     session["role"] = role
@@ -576,7 +562,7 @@ def logout():
 @login_required
 def current_user():
     user = get_db().execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
-    return jsonify({"user": public_user(user)})
+    return jsonify({"user": public_user(user), "demo_mode": DEMO_MODE})
 
 
 @app.get("/api/preferences")
@@ -643,26 +629,161 @@ def update_preferences():
 @app.get("/api/dashboard")
 @login_required
 def dashboard():
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
     db = get_db()
-    if USE_POSTGRES:
-        events = db.execute(
-            "SELECT COUNT(*) AS completed, COALESCE(AVG(score), 0) AS accuracy "
-            "FROM activity_attempts WHERE user_id = ? AND status = 'completed'",
-            (session["user_id"],),
-        ).fetchone()
+    user_id = session["user_id"]
+    events = db.execute(
+        """
+        SELECT COUNT(*) AS activities_completed,
+               ROUND(AVG(aa.score))::INTEGER AS average_score
+        FROM activity_attempts aa
+        JOIN activities a ON a.id = aa.activity_id
+        WHERE aa.user_id = ? AND aa.status = 'completed'
+        """,
+        (user_id,),
+    ).fetchone()
+    if session["role"] == "instructor":
+        lessons_completed = db.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT DISTINCT lp.user_id, lp.lesson_id
+                FROM lesson_progress lp
+                JOIN classroom_memberships cm
+                  ON cm.user_id = lp.user_id AND cm.status = 'active'
+                JOIN classrooms c
+                  ON c.id = cm.classroom_id AND c.is_active = TRUE
+                WHERE c.instructor_id = ? AND lp.progress_percent >= 100
+            ) completed_lessons
+            """,
+            (user_id,),
+        ).fetchone()["total"]
     else:
-        events = db.execute(
-            "SELECT COUNT(*) AS completed, COALESCE(AVG(score), 0) AS accuracy "
-            "FROM progress_events WHERE user_id = ?",
-            (session["user_id"],),
-        ).fetchone()
-    classrooms = db.execute("SELECT COUNT(*) AS total FROM classrooms WHERE instructor_id = ?", (session["user_id"],)).fetchone()
+        lessons_completed = db.execute(
+            "SELECT COUNT(*) AS total FROM lesson_progress "
+            "WHERE user_id = ? AND progress_percent >= 100",
+            (user_id,),
+        ).fetchone()["total"]
+    classrooms = db.execute(
+        "SELECT COUNT(*) AS total FROM classrooms WHERE instructor_id = ? AND is_active = TRUE",
+        (user_id,),
+    ).fetchone()
+    next_lesson = db.execute(
+        """
+        SELECT l.id, l.title, l.duration_minutes, p.id AS path_id,
+               p.title AS path_title, p.level,
+               COALESCE(lp.progress_percent, 0) AS progress
+        FROM lessons l
+        JOIN learning_paths p ON p.id = l.path_id AND p.is_published = TRUE
+        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = ?
+        WHERE l.is_published = TRUE
+          AND COALESCE(lp.progress_percent, 0) < 100
+        ORDER BY p.sort_order, l.sort_order, l.id
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+    featured_paths = db.execute(
+        """
+        SELECT p.id, p.title, p.description, p.level,
+               COUNT(DISTINCT l.id) AS lessons,
+               COALESCE(ROUND(AVG(lp.progress_percent))::INTEGER, 0) AS progress
+        FROM learning_paths p
+        LEFT JOIN lessons l ON l.path_id = p.id AND l.is_published = TRUE
+        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = ?
+        WHERE p.is_published = TRUE
+        GROUP BY p.id
+        ORDER BY p.sort_order, p.id
+        LIMIT 2
+        """,
+        (user_id,),
+    ).fetchall()
     return jsonify(
         {
             "role": session["role"],
-            "lessons_completed": events["completed"],
-            "average_score": round(events["accuracy"]),
+            "activities_completed": events["activities_completed"],
+            "lessons_completed": lessons_completed,
+            "average_score": events["average_score"],
+            "learning_streak": activity_streak(db, user_id),
             "classrooms": classrooms["total"],
+            "next_lesson": dict(next_lesson) if next_lesson else None,
+            "featured_paths": [dict(row) for row in featured_paths],
+        }
+    )
+
+
+@app.get("/api/data/readiness")
+@login_required
+def data_readiness():
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    requirements = [
+        (
+            "learning_paths",
+            "SELECT COUNT(*) AS total FROM learning_paths WHERE is_published = TRUE",
+            (),
+            "Add at least one published learning path with a title, level, and sort order.",
+        ),
+        (
+            "lessons",
+            "SELECT COUNT(*) AS total FROM lessons WHERE is_published = TRUE "
+            "AND CASE WHEN jsonb_typeof(content->'sections') = 'array' "
+            "THEN jsonb_array_length(content->'sections') > 0 ELSE FALSE END",
+            (),
+            "Add published lessons linked to a learning path, with title, duration, and a content.sections array.",
+        ),
+        (
+            "vocabulary_signs",
+            "SELECT COUNT(*) AS total FROM vocabulary_signs WHERE is_published = TRUE",
+            (),
+            "Add published vocabulary signs with a word, meaning, category, and optional hint/media URL.",
+        ),
+        (
+            "activities",
+            "SELECT COUNT(*) AS total FROM activities WHERE is_published = TRUE "
+            "AND activity_type = 'scenario' "
+            "AND CASE WHEN jsonb_typeof(content->'questions') = 'array' "
+            "THEN jsonb_array_length(content->'questions') > 0 ELSE FALSE END",
+            (),
+            "Add published scenario activities. Store each prompt, choices, correct answer, and feedback in its JSONB content.",
+        ),
+        (
+            "activities",
+            "SELECT COUNT(*) AS total FROM activities WHERE is_published = TRUE "
+            "AND activity_type = 'challenge' "
+            "AND CASE WHEN jsonb_typeof(content->'questions') = 'array' "
+            "THEN jsonb_array_length(content->'questions') > 0 ELSE FALSE END",
+            (),
+            "Add published challenge activities with questions and answer choices in JSONB content.",
+        ),
+        (
+            "activities",
+            "SELECT COUNT(*) AS total FROM activities WHERE is_published = TRUE "
+            "AND activity_type = 'practice' "
+            "AND CASE WHEN jsonb_typeof(content->'steps') = 'array' "
+            "THEN jsonb_array_length(content->'steps') > 0 ELSE FALSE END",
+            (),
+            "Add published practice activities with word, meaning, and sign-guidance steps in JSONB content.",
+        ),
+        (
+            "achievements",
+            "SELECT COUNT(*) AS total FROM achievements WHERE is_published = TRUE",
+            (),
+            "Add published achievement definitions with a name, description, and unlock criteria.",
+        ),
+    ]
+    return jsonify(
+        {
+            "database": "postgresql",
+            "missing_data": postgres_missing_records(db, requirements),
+            "requirements": [
+                {"table": table, "records": message}
+                for table, _query, _parameters, message in requirements
+            ],
         }
     )
 
@@ -670,29 +791,162 @@ def dashboard():
 @app.get("/api/paths")
 @login_required
 def learning_paths():
-    if USE_POSTGRES:
-        rows = get_db().execute(
-            """
-            SELECT p.id, p.title, p.description, p.level, COUNT(DISTINCT l.id) AS lessons,
-                   COALESCE(ROUND(AVG(lp.progress_percent))::INTEGER, 0) AS progress
-            FROM learning_paths p
-            LEFT JOIN lessons l ON l.path_id = p.id AND l.is_published = TRUE
-            LEFT JOIN lesson_progress lp
-              ON lp.lesson_id = l.id AND lp.user_id = ?
-            WHERE p.is_published = TRUE
-            GROUP BY p.id
-            ORDER BY p.sort_order, p.id
-            """,
-            (session["user_id"],),
-        ).fetchall()
-        return jsonify({"paths": [dict(row) for row in rows]})
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    rows = get_db().execute(
+        """
+        SELECT p.id, p.title, p.description, p.level, COUNT(DISTINCT l.id) AS lessons,
+               COALESCE(ROUND(AVG(lp.progress_percent))::INTEGER, 0) AS progress
+        FROM learning_paths p
+        LEFT JOIN lessons l ON l.path_id = p.id AND l.is_published = TRUE
+        LEFT JOIN lesson_progress lp
+          ON lp.lesson_id = l.id AND lp.user_id = ?
+        WHERE p.is_published = TRUE
+        GROUP BY p.id
+        ORDER BY p.sort_order, p.id
+        """,
+        (session["user_id"],),
+    ).fetchall()
+    return jsonify({"paths": [dict(row) for row in rows]})
+
+
+@app.get("/api/paths/<int:path_id>")
+@login_required
+def learning_path_detail(path_id):
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    path = db.execute(
+        "SELECT id, title, description, level FROM learning_paths "
+        "WHERE id = ? AND is_published = TRUE",
+        (path_id,),
+    ).fetchone()
+    if path is None:
+        return json_error("This learning path is not available.", 404)
+    lessons = db.execute(
+        """
+        SELECT l.id, l.title, l.duration_minutes, l.content,
+               COALESCE(lp.progress_percent, 0) AS progress
+        FROM lessons l
+        LEFT JOIN lesson_progress lp
+          ON lp.lesson_id = l.id AND lp.user_id = ?
+        WHERE l.path_id = ? AND l.is_published = TRUE
+        ORDER BY l.sort_order, l.id
+        """,
+        (session["user_id"], path_id),
+    ).fetchall()
+    return jsonify({"path": dict(path), "lessons": [dict(row) for row in lessons]})
+
+
+@app.post("/api/lessons/<int:lesson_id>/complete")
+@login_required
+def complete_lesson(lesson_id):
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    lesson = db.execute(
+        "SELECT id, title, content FROM lessons WHERE id = ? AND is_published = TRUE",
+        (lesson_id,),
+    ).fetchone()
+    if lesson is None:
+        return json_error("This lesson is not available.", 404)
+    if not isinstance(lesson["content"], dict) or not lesson["content"].get("sections"):
+        return (
+            jsonify(
+                {
+                    "error": "This lesson has no published lesson material.",
+                    "missing_data": [
+                        {
+                            "table": "lessons.content",
+                            "records": "Add a sections array with titled lesson content before marking this lesson complete.",
+                        }
+                    ],
+                }
+            ),
+            409,
+        )
+    db.execute(
+        """
+        INSERT INTO lesson_progress
+            (user_id, lesson_id, status, progress_percent, started_at, completed_at, updated_at)
+        VALUES(?, ?, 'completed', 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, lesson_id)
+        DO UPDATE SET progress_percent = 100, status = 'completed',
+                      completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        """,
+        (session["user_id"], lesson_id),
+    )
+    db.commit()
+    return jsonify({"success": True, "lesson_id": lesson_id, "progress": 100})
+
+
+@app.put("/api/lessons/<int:lesson_id>/progress")
+@login_required
+def update_lesson_progress(lesson_id):
+    data = request.get_json(silent=True) or {}
+    progress_percent = data.get("progress_percent")
+    if type(progress_percent) is not int or not 1 <= progress_percent <= 99:
+        return json_error("Progress must be a whole number between 1 and 99. Use lesson completion to reach 100.", 400)
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    lesson = db.execute(
+        "SELECT id, content FROM lessons WHERE id = ? AND is_published = TRUE",
+        (lesson_id,),
+    ).fetchone()
+    if lesson is None:
+        return json_error("This lesson is not available.", 404)
+    if not isinstance(lesson["content"], dict) or not lesson["content"].get("sections"):
+        return (
+            jsonify(
+                {
+                    "error": "This lesson has no published lesson material.",
+                    "missing_data": [
+                        {
+                            "table": "lessons.content",
+                            "records": "Add a sections array with titled lesson content before saving progress.",
+                        }
+                    ],
+                }
+            ),
+            409,
+        )
+    db.execute(
+        """
+        INSERT INTO lesson_progress
+            (user_id, lesson_id, status, progress_percent, started_at, updated_at)
+        VALUES(?, ?, 'in_progress', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, lesson_id)
+        DO UPDATE SET
+            status = CASE
+                WHEN lesson_progress.status = 'completed' THEN 'completed'
+                ELSE 'in_progress'
+            END,
+            progress_percent = CASE
+                WHEN lesson_progress.status = 'completed' THEN 100
+                ELSE GREATEST(lesson_progress.progress_percent, excluded.progress_percent)
+            END,
+            started_at = COALESCE(lesson_progress.started_at, excluded.started_at),
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (session["user_id"], lesson_id, progress_percent),
+    )
+    db.commit()
+    saved = db.execute(
+        "SELECT status, progress_percent FROM lesson_progress "
+        "WHERE user_id = ? AND lesson_id = ?",
+        (session["user_id"], lesson_id),
+    ).fetchone()
     return jsonify(
         {
-            "paths": [
-                {"id": "foundations", "title": "FSL Foundations", "lessons": 8, "level": "Beginner", "progress": 62},
-                {"id": "conversations", "title": "Everyday conversations", "lessons": 6, "level": "Beginner", "progress": 25},
-                {"id": "expression", "title": "Express yourself", "lessons": 10, "level": "Growing", "progress": 0},
-            ]
+            "success": True,
+            "lesson_id": lesson_id,
+            "status": saved["status"],
+            "progress": saved["progress_percent"],
         }
     )
 
@@ -700,223 +954,358 @@ def learning_paths():
 @app.get("/api/vocabulary")
 @login_required
 def vocabulary():
-    if USE_POSTGRES:
-        rows = get_db().execute(
-            "SELECT word, meaning, category, hint, media_url FROM vocabulary_signs "
-            "WHERE is_published = TRUE ORDER BY category, word"
-        ).fetchall()
-        return jsonify({"words": [dict(row) for row in rows]})
-    return jsonify(
-        {
-            "words": [
-                {"word": "Kumusta", "meaning": "Hello / How are you?", "category": "Greetings"},
-                {"word": "Salamat", "meaning": "Thank you", "category": "Everyday"},
-                {"word": "Pamilya", "meaning": "Family", "category": "People"},
-                {"word": "Kaibigan", "meaning": "Friend", "category": "People"},
-                {"word": "Tubig", "meaning": "Water", "category": "Everyday"},
-                {"word": "Paalam", "meaning": "Goodbye", "category": "Greetings"},
-            ]
-        }
-    )
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    rows = get_db().execute(
+        """
+        SELECT v.id, v.word, v.meaning, v.category, v.hint, v.media_url,
+               (f.user_id IS NOT NULL) AS is_saved
+        FROM vocabulary_signs v
+        LEFT JOIN user_vocabulary_favorites f
+          ON f.vocabulary_sign_id = v.id AND f.user_id = ?
+        WHERE v.is_published = TRUE
+        ORDER BY v.category, v.word
+        """,
+        (session["user_id"],),
+    ).fetchall()
+    return jsonify({"words": [dict(row) for row in rows]})
+
+
+@app.route("/api/vocabulary/<int:sign_id>/favorite", methods=["PUT", "DELETE"])
+@login_required
+def vocabulary_favorite(sign_id):
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    sign = db.execute(
+        "SELECT id FROM vocabulary_signs WHERE id = ? AND is_published = TRUE",
+        (sign_id,),
+    ).fetchone()
+    if sign is None:
+        return json_error("This vocabulary sign is not available.", 404)
+    if request.method == "PUT":
+        db.execute(
+            "INSERT INTO user_vocabulary_favorites(user_id, vocabulary_sign_id) "
+            "VALUES(?, ?) ON CONFLICT(user_id, vocabulary_sign_id) DO NOTHING",
+            (session["user_id"], sign_id),
+        )
+        saved = True
+    else:
+        db.execute(
+            "DELETE FROM user_vocabulary_favorites "
+            "WHERE user_id = ? AND vocabulary_sign_id = ?",
+            (session["user_id"], sign_id),
+        )
+        saved = False
+    db.commit()
+    return jsonify({"id": sign_id, "is_saved": saved})
 
 
 @app.get("/api/scenarios")
 @login_required
 def scenarios():
-    if USE_POSTGRES:
-        rows = get_db().execute(
-            "SELECT id, slug, title, content FROM activities "
-            "WHERE activity_type = 'scenario' AND is_published = TRUE ORDER BY sort_order, id"
-        ).fetchall()
-        return jsonify(
-            {
-                "scenarios": [
-                    {
-                        "id": row["id"],
-                        "title": row["title"],
-                        "category": (row["content"] or {}).get("category", "Practice"),
-                        "description": (row["content"] or {}).get("description", ""),
-                        "emoji": (row["content"] or {}).get("emoji"),
-                        "color": (row["content"] or {}).get("color"),
-                    }
-                    for row in rows
-                ]
-            }
-        )
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    rows = get_db().execute(
+        "SELECT id, slug, title, content FROM activities "
+        "WHERE activity_type = 'scenario' AND is_published = TRUE ORDER BY sort_order, id"
+    ).fetchall()
     return jsonify(
         {
             "scenarios": [
-                {"id": "store", "title": "At the sari-sari store", "category": "Everyday life"},
-                {"id": "friend", "title": "Meeting a new friend", "category": "Social"},
-                {"id": "lunch", "title": "Lunchtime at school", "category": "School"},
+                {
+                    "id": row["id"],
+                    "slug": row["slug"],
+                    "title": row["title"],
+                    "category": (row["content"] or {}).get("category"),
+                    "description": (row["content"] or {}).get("description"),
+                    "emoji": (row["content"] or {}).get("emoji"),
+                    "color": (row["content"] or {}).get("color"),
+                    "duration_minutes": (row["content"] or {}).get("duration_minutes"),
+                }
+                for row in rows
             ]
         }
     )
+
+
+@app.get("/api/challenges")
+@login_required
+def challenges():
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    rows = get_db().execute(
+        "SELECT id, slug, title, content FROM activities "
+        "WHERE activity_type = 'challenge' AND is_published = TRUE ORDER BY sort_order, id"
+    ).fetchall()
+    return jsonify({"challenges": [dict(row) for row in rows]})
+
+
+@app.get("/api/practice")
+@login_required
+def practice_activities():
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    rows = get_db().execute(
+        "SELECT id, slug, title, content FROM activities "
+        "WHERE activity_type = 'practice' AND is_published = TRUE ORDER BY sort_order, id"
+    ).fetchall()
+    return jsonify({"activities": [dict(row) for row in rows]})
+
+
+@app.get("/api/activities/<int:activity_id>")
+@login_required
+def activity_detail(activity_id):
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    row = get_db().execute(
+        """
+        SELECT id, slug, activity_type, title, content
+        FROM activities
+        WHERE id = ? AND is_published = TRUE
+        """,
+        (activity_id,),
+    ).fetchone()
+    if row is None:
+        return json_error("This activity is not available.", 404)
+    return jsonify({"activity": dict(row)})
 
 
 @app.post("/api/progress/complete")
 @login_required
 def record_progress():
     data = request.get_json(silent=True) or {}
-    activity = str(data.get("activity", "")).strip()
-    score = data.get("score", 0)
-    if not activity or len(activity) > 80:
-        return json_error("A valid activity name is required.", 400)
-    if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 100:
-        return json_error("Score must be a whole number between 0 and 100.", 400)
+    activity_id = data.get("activity_id")
+    if isinstance(activity_id, bool) or not isinstance(activity_id, int) or activity_id < 1:
+        return json_error("A valid published activity is required.", 400)
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
     db = get_db()
-    if USE_POSTGRES:
-        slug = f"practice-{hashlib.sha256(activity.encode('utf-8')).hexdigest()[:32]}"
-        activity_id = db.execute(
-            "INSERT INTO activities(slug, activity_type, title, content, is_published) "
-            "VALUES(?, 'practice', ?, ?, FALSE) "
-            "ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title RETURNING id",
-            (slug, activity, Jsonb({"source": "practice-progress"})),
-        ).fetchone()["id"]
-        db.execute(
-            "INSERT INTO activity_attempts(activity_id, user_id, score, status, response, completed_at) "
-            "VALUES(?, ?, ?, 'completed', ?, now())",
-            (activity_id, session["user_id"], score, Jsonb({"score": score})),
-        )
+    activity = db.execute(
+        "SELECT id, title, activity_type, content FROM activities "
+        "WHERE id = ? AND is_published = TRUE",
+        (activity_id,),
+    ).fetchone()
+    if activity is None:
+        return json_error("This activity is not available.", 404)
+    response = data.get("response", {})
+    if not isinstance(response, dict):
+        return json_error("Activity response must be an object.", 400)
+    if activity["activity_type"] == "practice":
+        score = 100
     else:
-        db.execute(
-            "INSERT INTO progress_events(user_id, activity, score) VALUES(?, ?, ?)",
-            (session["user_id"], activity, score),
-        )
+        questions = (activity["content"] or {}).get("questions", [])
+        answers = response.get("answers")
+        if not isinstance(questions, list) or not questions:
+            return json_error("This activity has no published questions yet.", 409)
+        if not isinstance(answers, list) or len(answers) != len(questions):
+            return json_error("Submit one answer for every published question.", 400)
+        correct = 0
+        for question, answer in zip(questions, answers):
+            choices = question.get("choices", []) if isinstance(question, dict) else []
+            if not isinstance(choices, list) or not choices:
+                return json_error("This activity has invalid question data.", 409)
+            if isinstance(answer, bool) or not isinstance(answer, (str, int)):
+                return json_error("Each answer must identify a published choice.", 400)
+            correct_choices = [
+                isinstance(choice, dict) and choice.get("is_correct") is True
+                for choice in choices
+            ]
+            if sum(correct_choices) != 1:
+                return json_error("Each activity question must have exactly one correct choice.", 409)
+            selected = next(
+                (
+                    choice
+                    for choice in choices
+                    if isinstance(choice, dict)
+                    and answer in (choice.get("id"), choice.get("label"))
+                ),
+                None,
+            )
+            if selected and selected.get("is_correct") is True:
+                correct += 1
+        score = round(correct * 100 / len(questions))
+    db.execute(
+        "INSERT INTO activity_attempts(activity_id, user_id, score, status, response, completed_at) "
+        "VALUES(?, ?, ?, 'completed', ?, now())",
+        (activity_id, session["user_id"], score, Jsonb(response)),
+    )
     db.commit()
-    return jsonify({"success": True, "activity": activity, "score": score}), 201
+    return jsonify({"success": True, "activity": activity["title"], "score": score}), 201
 
 
 @app.get("/api/progress")
 @login_required
 def progress():
-    if USE_POSTGRES:
-        rows = get_db().execute(
-            """
-            SELECT a.title AS activity, aa.score, aa.completed_at AS created_at
-            FROM activity_attempts aa
-            JOIN activities a ON a.id = aa.activity_id
-            WHERE aa.user_id = ? AND aa.status = 'completed'
-            ORDER BY aa.completed_at DESC
-            LIMIT 50
-            """,
-            (session["user_id"],),
-        ).fetchall()
-    else:
-        rows = get_db().execute(
-            "SELECT activity, score, created_at FROM progress_events "
-            "WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
-            (session["user_id"],),
-        ).fetchall()
-    return jsonify({"events": [dict(row) for row in rows]})
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    user_id = session["user_id"]
+    rows = db.execute(
+        """
+        SELECT aa.activity_id, a.title AS activity, aa.score, aa.completed_at AS created_at
+        FROM activity_attempts aa
+        JOIN activities a ON a.id = aa.activity_id
+        WHERE aa.user_id = ? AND aa.status = 'completed'
+        ORDER BY aa.completed_at DESC
+        LIMIT 50
+        """,
+        (user_id,),
+    ).fetchall()
+    activity_count = db.execute(
+        "SELECT COUNT(*) AS total FROM activity_attempts "
+        "WHERE user_id = ? AND status = 'completed'",
+        (user_id,),
+    ).fetchone()["total"]
+    weekly_activity = db.execute(
+        """
+        SELECT to_char(day::date, 'YYYY-MM-DD') AS activity_date, COUNT(aa.id) AS completed
+        FROM generate_series(CURRENT_DATE - 6, CURRENT_DATE, INTERVAL '1 day') AS days(day)
+        LEFT JOIN activity_attempts aa
+          ON aa.user_id = ? AND aa.status = 'completed'
+         AND aa.completed_at::date = day::date
+        GROUP BY day
+        ORDER BY day
+        """,
+        (user_id,),
+    ).fetchall()
+    achievements = db.execute(
+        """
+        SELECT a.id, a.title AS name, a.description,
+               (ua.user_id IS NOT NULL) AS earned
+        FROM achievements a
+        LEFT JOIN user_achievements ua
+          ON ua.achievement_id = a.id AND ua.user_id = ?
+        WHERE a.is_published = TRUE
+        ORDER BY a.sort_order, a.id
+        """,
+        (user_id,),
+    ).fetchall()
+    lesson_records = db.execute(
+        """
+        SELECT lp.lesson_id, l.title AS lesson, p.title AS path,
+               lp.status, lp.progress_percent, lp.best_score,
+               lp.started_at, lp.completed_at, lp.updated_at
+        FROM lesson_progress lp
+        JOIN lessons l ON l.id = lp.lesson_id
+        JOIN learning_paths p ON p.id = l.path_id
+        WHERE lp.user_id = ?
+        ORDER BY lp.updated_at DESC, lp.lesson_id
+        LIMIT 50
+        """,
+        (user_id,),
+    ).fetchall()
+    return jsonify(
+        {
+            "events": [dict(row) for row in rows],
+            "lessons": [dict(row) for row in lesson_records],
+            "activity_count": activity_count,
+            "weekly_activity": [dict(row) for row in weekly_activity],
+            "achievements": [dict(row) for row in achievements],
+            "current_streak": activity_streak(db, user_id),
+        }
+    )
 
 
 @app.get("/api/instructor/learners")
 @instructor_required
 def instructor_learners():
-    if USE_POSTGRES:
-        rows = get_db().execute(
-            """
-            SELECT cm.id AS membership_id, u.id AS user_id,
-                   COALESCE(u.name, cm.invited_name) AS name,
-                   COUNT(DISTINCT aa.id) AS lessons,
-                   COALESCE(AVG(aa.score), 0) AS accuracy
-            FROM classrooms c
-            JOIN classroom_memberships cm ON cm.classroom_id = c.id
-            LEFT JOIN users u ON u.id = cm.user_id AND u.role = 'learner'
-            LEFT JOIN activity_attempts aa
-              ON aa.user_id = u.id AND aa.status = 'completed'
-            WHERE c.instructor_id = ? AND c.is_active = TRUE
-              AND cm.status = 'active' AND cm.user_id IS NOT NULL
-            GROUP BY cm.id, u.id, u.name, cm.invited_name
-            ORDER BY name
-            """,
-            (session["user_id"],),
-        ).fetchall()
-        learners = []
-        for row in rows:
-            accuracy = round(row["accuracy"])
-            learners.append(
-                {
-                    "id": row["user_id"] if row["user_id"] is not None else -row["membership_id"],
-                    "name": row["name"] or "Invited learner",
-                    "level": "Trailblazer" if accuracy >= 90 else "Explorer" if accuracy >= 80 else "Sprout",
-                    "lessons": row["lessons"],
-                    "accuracy": accuracy,
-                    "streak": 0,
-                }
-            )
-        return jsonify({"learners": learners})
-    return jsonify(
-        {
-            "learners": [
-                {"id": 1, "name": "Mia Santos", "level": "Sprout", "lessons": 18, "accuracy": 92, "streak": 6},
-                {"id": 2, "name": "Ethan Cruz", "level": "Explorer", "lessons": 24, "accuracy": 86, "streak": 3},
-                {"id": 3, "name": "Lia Reyes", "level": "Sprout", "lessons": 11, "accuracy": 78, "streak": 2},
-                {"id": 4, "name": "Noah Garcia", "level": "Trailblazer", "lessons": 31, "accuracy": 95, "streak": 9},
-            ]
-        }
-    )
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT cm.id AS membership_id, u.id AS user_id,
+               COALESCE(u.name, cm.invited_name) AS name,
+               COUNT(DISTINCT aa.id) AS activities,
+               AVG(aa.score) AS accuracy,
+               MAX(aa.completed_at) AS last_active
+        FROM classrooms c
+        JOIN classroom_memberships cm ON cm.classroom_id = c.id
+        LEFT JOIN users u ON u.id = cm.user_id AND u.role = 'learner'
+        LEFT JOIN activity_attempts aa
+          ON aa.user_id = u.id AND aa.status = 'completed'
+        WHERE c.instructor_id = ? AND c.is_active = TRUE
+          AND cm.status = 'active' AND cm.user_id IS NOT NULL
+        GROUP BY cm.id, u.id, u.name, cm.invited_name
+        ORDER BY name
+        """,
+        (session["user_id"],),
+    ).fetchall()
+    learners = []
+    for row in rows:
+        accuracy = round(row["accuracy"]) if row["accuracy"] is not None else None
+        learners.append(
+            {
+                "id": row["user_id"],
+                "name": row["name"] or "Invited learner",
+                "level": "Not assessed" if accuracy is None else "Trailblazer" if accuracy >= 90 else "Explorer" if accuracy >= 80 else "Sprout",
+                "activities": row["activities"],
+                "accuracy": accuracy,
+                "last_active": row["last_active"],
+            }
+        )
+    return jsonify({"learners": learners})
 
 
 @app.get("/api/instructor/learners/<int:learner_id>")
 @instructor_required
 def instructor_learner_detail(learner_id):
-    if USE_POSTGRES:
-        db = get_db()
-        row = db.execute(
-            """
-            SELECT u.id, u.name, COUNT(DISTINCT aa.id) AS lessons,
-                   COALESCE(AVG(aa.score), 0) AS accuracy
-            FROM users u
-            JOIN classroom_memberships cm ON cm.user_id = u.id AND cm.status = 'active'
-            JOIN classrooms c ON c.id = cm.classroom_id
-            LEFT JOIN activity_attempts aa
-              ON aa.user_id = u.id AND aa.status = 'completed'
-            WHERE u.id = ? AND u.role = 'learner'
-              AND c.instructor_id = ? AND c.is_active = TRUE
-            GROUP BY u.id, u.name
-            """,
-            (learner_id, session["user_id"]),
-        ).fetchone()
-        if row is None:
-            return json_error("Learner not found.", 404)
-        accuracy = round(row["accuracy"])
-        learner = {
-            "id": row["id"],
-            "name": row["name"],
-            "level": "Trailblazer" if accuracy >= 90 else "Explorer" if accuracy >= 80 else "Sprout",
-            "lessons": row["lessons"],
-            "accuracy": accuracy,
-            "streak": 0,
-        }
-        events = db.execute(
-            """
-            SELECT a.title AS activity, aa.score, aa.completed_at AS created_at
-            FROM activity_attempts aa
-            JOIN activities a ON a.id = aa.activity_id
-            JOIN classroom_memberships cm ON cm.user_id = aa.user_id AND cm.status = 'active'
-            JOIN classrooms c ON c.id = cm.classroom_id
-            WHERE aa.user_id = ? AND aa.status = 'completed'
-              AND c.instructor_id = ? AND c.is_active = TRUE
-            GROUP BY aa.id, a.title, aa.score, aa.completed_at
-            ORDER BY aa.completed_at DESC
-            LIMIT 10
-            """,
-            (learner_id, session["user_id"]),
-        ).fetchall()
-        return jsonify({"learner": learner, "events": [dict(event) for event in events]})
-
-    learners = [
-        {"id": 1, "name": "Mia Santos", "level": "Sprout", "lessons": 18, "accuracy": 92, "streak": 6},
-        {"id": 2, "name": "Ethan Cruz", "level": "Explorer", "lessons": 24, "accuracy": 86, "streak": 3},
-        {"id": 3, "name": "Lia Reyes", "level": "Sprout", "lessons": 11, "accuracy": 78, "streak": 2},
-        {"id": 4, "name": "Noah Garcia", "level": "Trailblazer", "lessons": 31, "accuracy": 95, "streak": 9},
-    ]
-    learner = next((person for person in learners if person["id"] == learner_id), None)
-    if learner is None:
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT u.id, u.name, COUNT(DISTINCT aa.id) AS activities,
+               AVG(aa.score) AS accuracy, MAX(aa.completed_at) AS last_active
+        FROM users u
+        JOIN classroom_memberships cm ON cm.user_id = u.id AND cm.status = 'active'
+        JOIN classrooms c ON c.id = cm.classroom_id
+        LEFT JOIN activity_attempts aa
+          ON aa.user_id = u.id AND aa.status = 'completed'
+        WHERE u.id = ? AND u.role = 'learner'
+          AND c.instructor_id = ? AND c.is_active = TRUE
+        GROUP BY u.id, u.name
+        """,
+        (learner_id, session["user_id"]),
+    ).fetchone()
+    if row is None:
         return json_error("Learner not found.", 404)
-    return jsonify({"learner": learner})
+    accuracy = round(row["accuracy"]) if row["accuracy"] is not None else None
+    learner = {
+        "id": row["id"],
+        "name": row["name"],
+        "level": "Not assessed" if accuracy is None else "Trailblazer" if accuracy >= 90 else "Explorer" if accuracy >= 80 else "Sprout",
+        "activities": row["activities"],
+        "accuracy": accuracy,
+        "last_active": row["last_active"],
+    }
+    events = db.execute(
+        """
+        SELECT a.title AS activity, aa.score, aa.completed_at AS created_at
+        FROM activity_attempts aa
+        JOIN activities a ON a.id = aa.activity_id
+        JOIN classroom_memberships cm ON cm.user_id = aa.user_id AND cm.status = 'active'
+        JOIN classrooms c ON c.id = cm.classroom_id
+        WHERE aa.user_id = ? AND aa.status = 'completed'
+          AND c.instructor_id = ? AND c.is_active = TRUE
+        GROUP BY aa.id, a.title, aa.score, aa.completed_at
+        ORDER BY aa.completed_at DESC
+        LIMIT 10
+        """,
+        (learner_id, session["user_id"]),
+    ).fetchall()
+    return jsonify({"learner": learner, "events": [dict(event) for event in events]})
 
 
 @app.get("/api/instructor/classrooms")

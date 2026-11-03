@@ -32,7 +32,11 @@ export async function api(path, options = {}) {
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(payload.error || `Request failed (${response.status})`);
+      const missingRecords = Array.isArray(payload.missing_data)
+        ? payload.missing_data.map(({ table, records }) => `${table}: ${records}`).join(" ")
+        : "";
+      const message = payload.error || `Request failed (${response.status})`;
+      throw new Error(missingRecords ? `${message} ${missingRecords}` : message);
     }
     return payload;
   } finally {

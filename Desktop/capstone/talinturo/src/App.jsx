@@ -95,15 +95,34 @@ function App() {
     learner_type: "Adult learner",
     learning_goal: "Everyday conversations",
   });
+  const [demoMode, setDemoMode] = useState(false);
+  const [currentStreak, setCurrentStreak] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [toast, setToast] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [apiOnline, setApiOnline] = useState(null);
+  const workspaceRef = useRef(null);
+  const topbarRef = useRef(null);
   const pendingApiRequests = useSyncExternalStore(subscribeToApiLoading, getPendingApiRequests, getPendingApiRequests);
   const location = useLocation();
   const navigate = useNavigate();
+  const previousPathnameRef = useRef(location.pathname);
+
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    const topbar = topbarRef.current;
+    if (!workspace || !topbar) return undefined;
+
+    const updateSidebarOffset = () => {
+      workspace.style.setProperty("--workspace-header-height", `${topbar.getBoundingClientRect().height}px`);
+    };
+    const observer = new ResizeObserver(updateSidebarOffset);
+    observer.observe(topbar);
+    updateSidebarOffset();
+    return () => observer.disconnect();
+  }, [isAuthenticated]);
 
   useEffect(() => {
     let active = true;
@@ -112,6 +131,7 @@ function App() {
         if (!active) return;
         setApiOnline(true);
         setIsAuthenticated(true);
+        setDemoMode(result.demo_mode === true);
         setRole(result.user.role);
         localStorage.setItem("talinturo-role", result.user.role);
         localStorage.setItem("talinturo-name", result.user.name);
@@ -125,6 +145,22 @@ function App() {
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user.id) {
+      setCurrentStreak(null);
+      return undefined;
+    }
+    let active = true;
+    api("/dashboard")
+      .then((summary) => {
+        if (active) setCurrentStreak(summary.learning_streak);
+      })
+      .catch(() => {
+        if (active) setCurrentStreak(null);
+      });
+    return () => { active = false; };
+  }, [isAuthenticated, user.id]);
 
   useEffect(() => {
     if (!isAuthenticated || !user.id) return undefined;
@@ -149,11 +185,11 @@ function App() {
   }, [isAuthenticated, user.id]);
 
   useEffect(() => {
-    setMobileOpen(false);
     setMenuOpen(false);
     const oauthError = new URLSearchParams(location.search).get("oauth_error");
     if (oauthError) {
       const messages = {
+        api_unavailable: "The account service is unavailable. Start the Flask API, then try again.",
         not_configured: "Google sign-in isn't configured yet. Add the OAuth client ID and secret to the backend environment.",
         invalid_flow: "That Google sign-in link is invalid. Please try again.",
         start_failed: "Google sign-in couldn't be started. Please try again.",
@@ -167,6 +203,15 @@ function App() {
       navigate(fallbackRoute, { replace: true });
     }
   }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    const pathnameChanged = previousPathnameRef.current !== location.pathname;
+    previousPathnameRef.current = location.pathname;
+    if (!pathnameChanged || !sidebarOpen) return undefined;
+
+    const timeoutId = window.setTimeout(() => setSidebarOpen(false), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [location.pathname, sidebarOpen]);
 
   const changeRole = async (nextRole) => {
     setRole(nextRole);
@@ -183,6 +228,7 @@ function App() {
   };
 
   const signOut = async () => {
+    setSidebarOpen(false);
     try {
       await api("/auth/logout", { method: "POST" });
     } catch (error) {
@@ -242,6 +288,7 @@ function App() {
     "--muted": settings.themeMode === "dark" ? "#b1b2b8" : "#807a71",
     "--muted-shadow": "none",
   };
+  const onboardingInProgress = location.pathname === "/profile/setup";
 
   if (authLoading) {
     return <div className="app-shell public-shell" style={appStyle}><div className="public-loading">Getting your learning space ready…</div><ConnieLoader active={pendingApiRequests > 0} /></div>;
@@ -266,15 +313,11 @@ function App() {
   }
 
   return (
-    <div className="app-shell workspace-shell" data-theme={settings.themeMode} style={appStyle}>
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
-        <Link className="brand" to="/" aria-label="Talinturo home">
-          <BrandLogo className="brand-logo-sidebar" />
-          <span className="brand-name">talinturo<small>FSL, one sign at a time</small></span>
-        </Link>
+    <div ref={workspaceRef} className={`app-shell workspace-shell ${sidebarOpen && !onboardingInProgress ? "navigation-open" : ""}`} data-theme={settings.themeMode} style={appStyle}>
+      {!onboardingInProgress && <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-profile">
           <div className="avatar avatar-mint">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div>
-          <div><strong>{user.name}</strong><span>{role === "instructor" ? "Instructor account" : "Level 2 · Explorer"}</span></div>
+          <div><strong>{user.name}</strong><span>{role === "instructor" ? "Instructor account" : "Learner account"}</span></div>
           <span className="online-dot" />
         </div>
         <nav className="side-nav" aria-label="Main navigation">
@@ -282,28 +325,49 @@ function App() {
             item.heading ? <p className="nav-heading" key={item.heading}>{item.heading}</p> :
               <NavLink key={`${item.to}-${index}`} to={item.to} end={item.to === "/"} className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
                 <span className="nav-icon"><Icon name={item.icon} size={19} /></span><span>{item.label}</span>
-                {item.label === "Level challenge" && <span className="nav-pill">NEW</span>}
               </NavLink>,
           )}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-streak"><Icon name="flame" size={22} /><div><strong>6 day streak</strong><small>You're on a roll!</small></div><span className="streak-sparkle">✦</span></div>
+          {currentStreak !== null && <div className="sidebar-streak"><Icon name="flame" size={22} /><div><strong>{currentStreak} day streak</strong><small>{currentStreak ? "You're on a roll!" : "Start a practice activity"}</small></div><span className="streak-sparkle">✦</span></div>}
           <Link className="nav-link" to="/help"><span className="nav-icon">?</span><span>Help & about</span></Link>
           <button className="sidebar-account" onClick={() => navigate("/profile")}><span className="avatar avatar-small">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span><strong>{user.name}</strong><small>View profile</small></span><span className="account-dots">···</span></button>
         </div>
-      </aside>
+      </aside>}
       <div className="main-column">
-        <header className="topbar">
-          <button className="mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(!mobileOpen)}><Icon name="menu" size={20} /></button>
-          <div className="breadcrumb"><span>Talinturo</span><b>/</b><strong>{pageTitle(location.pathname)}</strong></div>
+        <header ref={topbarRef} className="topbar">
+          <div className="breadcrumb">
+            <Link className="header-brand" to="/" aria-label="Talinturo home">
+              <BrandLogo className="brand-logo-header" />
+              <span className="header-brand-name">talinturo<small>FSL, one sign at a time</small></span>
+            </Link>
+            <b>/</b>
+            <strong>{pageTitle(location.pathname)}</strong>
+            {!onboardingInProgress && <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={sidebarOpen ? "Hide navigation" : "Show navigation"}
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen((open) => !open)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+                <path d="M9 5v14" />
+                <path d={sidebarOpen ? "m15 9-3 3 3 3" : "m13 9 3 3-3 3"} />
+              </svg>
+            </button>}
+          </div>
           <div className="top-actions">
-            {apiOnline === false && <span className="api-status"><i /> Offline demo</span>}
-            <button className="streak-top" aria-label="Current streak"><Icon name="flame" size={17} /> 6 <small>day streak</small></button>
-            <button className="role-switch" onClick={() => changeRole(role === "instructor" ? "learner" : "instructor")}>{role === "instructor" ? "Learner view" : "Instructor view"} <span>↗</span></button>
-            <button className="icon-button notification-button" aria-label="Notifications" onClick={() => setToast("You're all caught up. Keep up the great work!")}><Icon name="users" size={17} /><i /></button>
+            {apiOnline === false && <span className="api-status"><i /> API offline</span>}
+            {currentStreak !== null && <span className="streak-top" aria-label="Current streak"><Icon name="flame" size={17} /> {currentStreak} <small>day streak</small></span>}
+            {demoMode && <button className="role-switch" onClick={() => changeRole(role === "instructor" ? "learner" : "instructor")}>{role === "instructor" ? "Learner view" : "Instructor view"} <span>↗</span></button>}
             <div className="profile-menu-wrap">
-              <button className="top-profile" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen}><span className="avatar avatar-small">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span>{user.name.split(" ")[0]}</span><b>⌄</b></button>
-              {menuOpen && <div className="profile-menu"><Link to="/profile">My profile</Link><Link to="/settings">Settings</Link><button onClick={signOut}>Sign out</button></div>}
+              <button className="top-profile" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen}><span className="avatar avatar-small">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span>{user.name.split(" ")[0]}</span></button>
+              {menuOpen && <div className="profile-menu">
+                <Link to="/profile" onClick={() => setSidebarOpen(false)}>My profile</Link>
+                <Link to="/settings" onClick={() => setSidebarOpen(false)}>Settings</Link>
+                <button onClick={signOut}>Sign out</button>
+              </div>}
             </div>
           </div>
         </header>
@@ -311,10 +375,12 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard user={user} onNavigate={navigate} />} />
             <Route path="/paths" element={<LearningPaths onNavigate={navigate} />} />
+            <Route path="/paths/:pathId" element={<LearningPathDetails onNavigate={navigate} />} />
             <Route path="/vocabulary" element={<Vocabulary />} />
             <Route path="/practice" element={<Practice onToast={setToast} />} />
             <Route path="/scenarios" element={<Scenarios onNavigate={navigate} />} />
-            <Route path="/activity" element={<ScenarioActivity onNavigate={navigate} onToast={setToast} />} />
+            <Route path="/activity" element={<Navigate to="/scenarios" replace />} />
+            <Route path="/activity/:activityId" element={<ScenarioActivity onNavigate={navigate} />} />
             <Route path="/results" element={<ActivityResults onNavigate={navigate} />} />
             <Route path="/challenge" element={<Challenge onNavigate={navigate} onToast={setToast} />} />
             <Route path="/challenge/success" element={<ChallengeFeedback success onNavigate={navigate} />} />
@@ -340,7 +406,15 @@ function App() {
             <Route path="/help" element={<Help />} />
             <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { acceptAuth(account); navigate(account.role === "instructor" ? "/instructor" : "/"); }} onToast={setToast} />} />
             <Route path="/signup" element={<AuthPage mode="signup" onAuth={(account) => { acceptAuth(account); navigate("/profile/setup"); }} onToast={setToast} />} />
-            <Route path="/profile/setup" element={<ProfileSetup onDone={() => navigate("/")} />} />
+            <Route path="/profile/setup" element={<ProfileSetup onDone={async (profile) => {
+              const result = await api("/profile", {
+                method: "PUT",
+                body: JSON.stringify({ name: user.name, ...profile }),
+              });
+              setUser(result.user);
+              localStorage.setItem("talinturo-name", result.user.name);
+              navigate("/");
+            }} />} />
             <Route path="/forgot-password" element={<ForgotPassword onToast={setToast} />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/welcome" element={<Navigate to="/" replace />} />
@@ -380,6 +454,56 @@ function ProgressBar({ value, color = "green" }) {
 function LandingPage({ onNavigate, onAuth, onToast }) {
   const [signup, setSignup] = useState({ name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const landingRef = useRef(null);
+  const headerRef = useRef(null);
+
+  useEffect(() => {
+    const landing = landingRef.current;
+    const header = headerRef.current;
+    if (!landing || !header) return undefined;
+
+    let frame = 0;
+    const updateHeader = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const headerHeight = header.getBoundingClientRect().height;
+        landing.style.setProperty("--landing-header-height", `${headerHeight}px`);
+        const sections = [...landing.querySelectorAll(".landing-hero, .landing-join, .landing-about, .landing-learners, .landing-team, .landing-contact")];
+        const section = sections.find((item) => {
+          const bounds = item.getBoundingClientRect();
+          return bounds.top <= headerHeight + 1 && bounds.bottom > headerHeight + 1;
+        }) || sections.reduce((closest, item) => {
+          if (!closest) return item;
+          const distance = Math.abs(item.getBoundingClientRect().top - headerHeight);
+          return distance < Math.abs(closest.getBoundingClientRect().top - headerHeight) ? item : closest;
+        }, null);
+        if (!section) return;
+
+        const background = getComputedStyle(section).backgroundColor;
+        const channels = background.match(/[\d.]+/g)?.slice(0, 3).map(Number) || [247, 241, 229];
+        const brightness = (channels[0] * 299 + channels[1] * 587 + channels[2] * 114) / 1000;
+        header.style.backgroundColor = background;
+        header.dataset.theme = brightness < 150 ? "dark" : "light";
+        const activeLink = section.id === "home" ? "home" : section.id === "contact" ? "contact" : "about";
+        header.querySelectorAll("nav a").forEach((link) => {
+          const active = link.getAttribute("href") === `#${activeLink}`;
+          link.classList.toggle("public-nav-active", active);
+          if (active) link.setAttribute("aria-current", "location");
+          else link.removeAttribute("aria-current");
+        });
+      });
+    };
+
+    updateHeader();
+    window.addEventListener("scroll", updateHeader, { passive: true });
+    window.addEventListener("resize", updateHeader);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", updateHeader);
+      window.removeEventListener("resize", updateHeader);
+    };
+  }, []);
 
   const createAccount = async (event) => {
     event.preventDefault();
@@ -395,23 +519,34 @@ function LandingPage({ onNavigate, onAuth, onToast }) {
     }
   };
 
+  const startGoogleSignup = async () => {
+    setGoogleLoading(true);
+    try {
+      await api("/health");
+      window.location.assign("/api/auth/google?flow=signup");
+    } catch (error) {
+      onToast(`Couldn't reach the account service. Start the Flask API and try again. ${error.message}`);
+      setGoogleLoading(false);
+    }
+  };
+
   const contactNotice = (event) => {
     event.preventDefault();
     onToast("Contact messaging isn't connected in this demo yet.");
   };
 
   return (
-    <div className="public-landing">
+    <div className="public-landing" ref={landingRef}>
+      <header ref={headerRef} className="public-header" data-theme="dark">
+        <a className="public-brand" href="#home" aria-label="Talinturo home"><BrandLogo className="brand-logo-public" /><span>TALINTURO</span></a>
+        <nav aria-label="Landing page navigation">
+          <a className="public-nav-active" aria-current="location" href="#home">Home <span>•</span></a>
+          <a href="#about">About</a>
+          <a href="#contact">Contact</a>
+        </nav>
+        <a className="landing-button landing-button-yellow" href="#join">Get Started <span aria-hidden="true">↗</span></a>
+      </header>
       <section className="landing-hero" id="home">
-        <header className="public-header">
-          <a className="public-brand" href="#home" aria-label="Talinturo home"><BrandLogo className="brand-logo-public" /><span>TALINTURO</span></a>
-          <nav aria-label="Landing page navigation">
-            <a className="public-nav-active" href="#home">Home <span>•</span></a>
-            <a href="#about">About</a>
-            <a href="#contact">Contact</a>
-          </nav>
-          <a className="landing-button landing-button-yellow" href="#join">Get Started <span aria-hidden="true">↗</span></a>
-        </header>
         <div className="hero-cloud">
           <span className="hero-pill">A little play. A lot of connection.</span>
           <svg className="hero-sparkle hero-sparkle-one" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 0C27.5 15 33 20.5 48 24C33 27.5 27.5 33 24 48C20.5 33 15 27.5 0 24C15 20.5 20.5 15 24 0Z" /><circle cx="24" cy="24" r="3" /></svg>
@@ -439,12 +574,12 @@ function LandingPage({ onNavigate, onAuth, onToast }) {
             <p>A space to learn, play, and connect.</p>
             <form onSubmit={createAccount}>
               <label>Your name<input value={signup.name} onChange={(event) => setSignup({ ...signup, name: event.target.value })} autoComplete="name" required maxLength={70} placeholder="How should we call you?" /></label>
-              <label>Email<input type="email" value={signup.email} onChange={(event) => setSignup({ ...signup, email: event.target.value })} autoComplete="email" required placeholder="you@example.com" /></label>
-              <label>Password<input type="password" value={signup.password} onChange={(event) => setSignup({ ...signup, password: event.target.value })} autoComplete="new-password" minLength={8} required placeholder="Create a password" /></label>
-              <button className="landing-button landing-button-blue" type="submit" disabled={loading}>{loading ? "Creating account…" : "Create account"}</button>
+              <label>Email<input type="email" value={signup.email} onChange={(event) => setSignup({ ...signup, email: event.target.value })} autoComplete="email" required maxLength={254} placeholder="you@example.com" /></label>
+              <label>Password<input type="password" value={signup.password} onChange={(event) => setSignup({ ...signup, password: event.target.value })} autoComplete="new-password" minLength={8} maxLength={128} required placeholder="Create a password" /></label>
+              <button className="landing-button landing-button-blue" type="submit" disabled={loading || googleLoading}>{loading ? "Creating account…" : "Create account"}</button>
             </form>
             <div className="join-or"><span>or sign up with</span></div>
-            <button className="join-google-button" type="button" onClick={() => window.location.assign("/api/auth/google?flow=signup")}>◎ Sign up with Google</button>
+            <button className="join-google-button" type="button" disabled={loading || googleLoading} onClick={startGoogleSignup}>{googleLoading ? "Connecting to Google…" : "◎ Sign up with Google"}</button>
             <p className="join-signin">Already learning with us? <button type="button" onClick={() => onNavigate("/login")}>Sign in</button></p>
           </div>
           <div className="join-mascot join-mascot-bird" aria-hidden="true">
@@ -536,12 +671,16 @@ function LandingPage({ onNavigate, onAuth, onToast }) {
 
 function Dashboard({ user, onNavigate }) {
   const [summary, setSummary] = useState(null);
+  const [readiness, setReadiness] = useState(null);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     api("/dashboard")
       .then(setSummary)
       .catch((error) => setLoadError(error.message));
+    api("/data/readiness")
+      .then(setReadiness)
+      .catch((error) => setLoadError((current) => current || error.message));
   }, []);
 
   const firstName = user.name.split(" ")[0];
@@ -554,7 +693,7 @@ function Dashboard({ user, onNavigate }) {
           <h1>Hi, {firstName}!<br />Ready for a little progress?</h1>
           <p>Every sign is a new way to connect. Pick up where you left off, or explore something new.</p>
           <div className="learner-hero-actions">
-            <Button className="dashboard-button-yellow" onClick={() => onNavigate("/practice")}>Continue learning <span>→</span></Button>
+            <Button className="dashboard-button-yellow" onClick={() => onNavigate(summary?.next_lesson ? `/paths/${summary.next_lesson.path_id}` : "/paths")}>Continue learning <span>→</span></Button>
             <button className="dashboard-text-button" onClick={() => onNavigate("/paths")}>Browse learning paths</button>
           </div>
         </div>
@@ -570,26 +709,27 @@ function Dashboard({ user, onNavigate }) {
 
       <section className="dashboard-metrics" aria-label="Your learning at a glance">
         <StatCard icon="bookOpen" tone="blue" label="Lessons completed" value={summary ? summary.lessons_completed : "—"} change="Every step counts" />
-        <StatCard icon="star" tone="yellow" label="Practice accuracy" value={summary ? `${summary.average_score}%` : "—"} change="Keep building confidence" />
-        <StatCard icon="flame" tone="coral" label="Learning streak" value="6 days" change="A little practice each day" />
+        <StatCard icon="star" tone="yellow" label="Practice accuracy" value={summary?.average_score == null ? "—" : `${summary.average_score}%`} change="From completed activities" />
+        <StatCard icon="flame" tone="coral" label="Learning streak" value={summary ? `${summary.learning_streak} days` : "—"} change="A little practice each day" />
       </section>
 
       <div className="learner-dashboard-grid">
         <section className="dashboard-card continue-card">
           <div className="dashboard-card-heading">
             <div><p className="dashboard-kicker">PICK UP WHERE YOU LEFT OFF</p><h2>Your next lesson</h2></div>
-            <span className="dashboard-step">01 / 04</span>
           </div>
-          <div className="next-lesson">
-            <div className="next-lesson-art"><Icon name="hand" size={39} /></div>
-            <div className="next-lesson-copy">
-              <span className="dashboard-kicker">FSL FOUNDATIONS · BEGINNER</span>
-              <h3>Kumusta! Let's say hello</h3>
-              <p>Practice a friendly greeting and start a conversation.</p>
-              <div className="next-lesson-progress"><ProgressBar value={75} color="blue" /><span>75%</span></div>
+          {summary?.next_lesson ? <>
+            <div className="next-lesson">
+              <div className="next-lesson-art"><Icon name="hand" size={39} /></div>
+              <div className="next-lesson-copy">
+                <span className="dashboard-kicker">{summary.next_lesson.path_title} · {summary.next_lesson.level}</span>
+                <h3>{summary.next_lesson.title}</h3>
+                <p>Continue building your skills, one lesson at a time.</p>
+                <div className="next-lesson-progress"><ProgressBar value={summary.next_lesson.progress} color="blue" /><span>{summary.next_lesson.progress}%</span></div>
+              </div>
             </div>
-          </div>
-          <div className="next-lesson-footer"><span>About 8 minutes</span><Button onClick={() => onNavigate("/practice")}>Continue <span>→</span></Button></div>
+            <div className="next-lesson-footer"><span>{summary.next_lesson.duration_minutes ? `About ${summary.next_lesson.duration_minutes} minutes` : "Continue at your own pace"}</span><Button onClick={() => onNavigate(`/paths/${summary.next_lesson.path_id}`)}>Continue <span>→</span></Button></div>
+          </> : <div className="empty-state"><Icon name="bookOpen" size={30} /><h3>No lesson is ready yet</h3><p>Publish a lesson in the PostgreSQL <code>lessons</code> table and connect it to a published learning path.</p></div>}
         </section>
 
         <section className="dashboard-card quick-start-card">
@@ -602,11 +742,13 @@ function Dashboard({ user, onNavigate }) {
         <section className="dashboard-card learner-path-card">
           <div className="dashboard-card-heading"><div><p className="dashboard-kicker">SMALL STEPS, BIG CONNECTIONS</p><h2>Your learning paths</h2></div><button className="dashboard-inline-link" onClick={() => onNavigate("/paths")}>See all <span>→</span></button></div>
           <div className="learner-paths">
-            <button className="learner-path-item path-item-yellow" onClick={() => onNavigate("/paths")}><span className="path-item-icon"><Icon name="hand" size={24} /></span><span><strong>FSL Foundations</strong><small>Greetings and introductions</small></span><Icon name="compass" size={19} /></button>
-            <button className="learner-path-item path-item-coral" onClick={() => onNavigate("/scenarios")}><span className="path-item-icon"><Icon name="home" size={24} /></span><span><strong>Everyday conversations</strong><small>Practice at home and in your community</small></span><Icon name="compass" size={19} /></button>
+            {summary?.featured_paths?.length ? summary.featured_paths.map((path, index) => (
+              <button className={`learner-path-item ${index % 2 ? "path-item-coral" : "path-item-yellow"}`} key={path.id} onClick={() => onNavigate(`/paths/${path.id}`)}><span className="path-item-icon"><Icon name={index % 2 ? "home" : "hand"} size={24} /></span><span><strong>{path.title}</strong><small>{path.description || path.level}</small></span><Icon name="compass" size={19} /></button>
+            )) : <div className="empty-state"><Icon name="bookOpen" size={30} /><h3>No learning paths yet</h3><p>Add a published path to PostgreSQL <code>learning_paths</code> to show it here.</p></div>}
           </div>
         </section>
       </div>
+      {readiness?.missing_data?.length > 0 && <MissingDatabaseData records={readiness.missing_data} />}
       <section className="learner-encouragement"><Icon name="heart" size={22} /><p><strong>Learning looks different for everyone.</strong> Go at your own pace. There's no wrong way to make progress.</p><button onClick={() => onNavigate("/progress")}>View my progress <span>→</span></button></section>
     </div>
   );
@@ -614,6 +756,11 @@ function Dashboard({ user, onNavigate }) {
 
 function StatCard({ icon, tone, label, value, change }) {
   return <div className="stat-card"><span className={`stat-icon ${tone}`}><Icon name={icon} size={21} /></span><div className="stat-copy"><small>{label}</small><strong>{value}</strong><span>{change}</span></div><span className="stat-menu">···</span></div>;
+}
+
+function MissingDatabaseData({ records }) {
+  if (!records?.length) return null;
+  return <section className="panel data-requirements"><p className="eyebrow">DATABASE CONTENT NEEDED</p><h2>What to add in PostgreSQL</h2><ul>{records.map((item, index) => <li key={`${item.table}-${index}`}><code>{item.table}</code> — {item.records}</li>)}</ul></section>;
 }
 
 function PathPreview({ icon, color, title, lessons: count, progress }) {
@@ -643,32 +790,104 @@ function LearningPaths({ onNavigate }) {
     {loadError && <p className="inline-error">Could not load learning paths: {loadError}</p>}
     {loading ? <div className="empty-state">Loading your learning paths…</div> : visiblePaths.length ? <div className="learning-path-grid">{visiblePaths.map((path, index) => {
       const color = ["peach", "lavender", "yellow"][index % 3];
-      return <article className="path-card" key={path.id}><div className={`path-card-art ${color}`}><span className="path-emoji"><Icon name="bookOpen" size={42} /></span><span className="path-level">{path.level}</span><span className="path-sparkle">✦</span></div><div className="path-card-content"><span className="eyebrow">LEARNING PATH</span><h2>{path.title}</h2><p>{path.description || "Build confidence one lesson and one sign at a time."}</p><div className="path-card-meta"><span>▤ {path.lessons} bite-sized lessons</span></div><div className="path-card-progress"><ProgressBar value={path.progress} /><span>{path.progress ? `${path.progress}%` : "Not started"}</span></div><Button variant={path.progress ? "primary" : "outline"} onClick={() => onNavigate("/practice")}>{path.progress ? "Continue path" : "Start learning"} <span>→</span></Button></div></article>;
-    })}</div> : <div className="empty-state"><Icon name="sprout" size={34} /><h2>No paths in this group yet</h2><p>Your next learning adventure is just around the corner.</p></div>}
+      return <article className="path-card" key={path.id}><div className={`path-card-art ${color}`}><span className="path-emoji"><Icon name="bookOpen" size={42} /></span><span className="path-level">{path.level}</span><span className="path-sparkle">✦</span></div><div className="path-card-content"><span className="eyebrow">LEARNING PATH</span><h2>{path.title}</h2>{path.description && <p>{path.description}</p>}<div className="path-card-meta"><span>▤ {path.lessons} bite-sized lessons</span></div><div className="path-card-progress"><ProgressBar value={path.progress} /><span>{path.progress}% complete</span></div><Button variant={path.progress ? "primary" : "outline"} onClick={() => onNavigate(`/paths/${path.id}`)}>View lessons <span>→</span></Button></div></article>;
+    })}</div> : <div className="empty-state"><Icon name="sprout" size={34} /><h2>{paths.length ? "No paths in this group yet" : "No published learning paths yet"}</h2><p>{paths.length ? "Choose another filter to see your paths." : <>Add a published record to PostgreSQL <code>learning_paths</code> and link published lessons to it.</>}</p></div>}
     <section className="encouragement-strip"><Icon name="sparkles" size={26} /><div><strong>Learning looks different for everyone.</strong><p>Go at your own pace. There's no wrong way to make progress.</p></div><button className="text-link" onClick={() => onNavigate("/help")}>Our approach →</button></section>
+  </>;
+}
+
+function LearningPathDetails({ onNavigate }) {
+  const { pathId } = useParams();
+  const [path, setPath] = useState(null);
+  const [lessons, setLessons] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [savingLessonId, setSavingLessonId] = useState(null);
+  useEffect(() => {
+    let active = true;
+    setPath(null);
+    setLessons([]);
+    setLoadError("");
+    setLoading(true);
+    api(`/paths/${pathId}`)
+      .then((result) => {
+        if (!active) return;
+        setPath(result.path);
+        setLessons(result.lessons);
+      })
+      .catch((error) => { if (active) setLoadError(error.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [pathId]);
+  const completeLesson = async (lessonId) => {
+    setSavingLessonId(lessonId);
+    setSaveError("");
+    try {
+      await api(`/lessons/${lessonId}/complete`, { method: "POST" });
+      setLessons((current) => current.map((lesson) => lesson.id === lessonId ? { ...lesson, progress: 100 } : lesson));
+    } catch (error) {
+      setSaveError(error.message);
+    } finally {
+      setSavingLessonId(null);
+    }
+  };
+  if (loadError) return <><PageTitle eyebrow="LEARNING PATH" title="Path unavailable" /><p className="inline-error">{loadError}</p><Button variant="outline" onClick={() => onNavigate("/paths")}>← All learning paths</Button></>;
+  if (loading || !path) return <div className="empty-state">Loading learning path…</div>;
+  return <>
+    <PageTitle eyebrow={path.level} title={path.title} description={path.description} action={<Button variant="outline" onClick={() => onNavigate("/paths")}>← All paths</Button>} />
+    {saveError && <p className="inline-error">{saveError}</p>}
+    {lessons.length ? <div className="learning-path-grid">{lessons.map((lesson, index) => {
+      const sections = Array.isArray(lesson.content?.sections) ? lesson.content.sections : [];
+      const hasSections = sections.length > 0;
+      return <article className="path-card" key={lesson.id}>
+        <div className={`path-card-art ${["peach", "lavender", "yellow"][index % 3]}`}>
+          <span className="path-emoji"><Icon name="bookOpen" size={42} /></span>
+          <span className="path-level">{lesson.duration_minutes ? `${lesson.duration_minutes} min` : "Lesson"}</span>
+        </div>
+        <div className="path-card-content">
+          <h2>{lesson.title}</h2>
+          {lesson.content?.description && <p>{lesson.content.description}</p>}
+          <div className="path-card-progress"><ProgressBar value={lesson.progress} /><span>{lesson.progress}% complete</span></div>
+          {hasSections ? sections.map((section, sectionIndex) => <div className="insight-row" key={section.id || sectionIndex}><div><strong>{section.title}</strong><small>{section.body}</small></div></div>) : <p>Lesson material is not available yet. Add a lesson <code>content</code> JSON object to the PostgreSQL <code>lessons</code> table.</p>}
+          <Button variant={lesson.progress >= 100 ? "outline" : "primary"} disabled={lesson.progress >= 100 || savingLessonId === lesson.id || !hasSections} onClick={() => completeLesson(lesson.id)}>
+            {lesson.progress >= 100 ? "Lesson completed" : savingLessonId === lesson.id ? "Saving…" : hasSections ? "Mark lesson complete" : "Lesson content needed"}
+          </Button>
+        </div>
+      </article>;
+    })}</div> : <div className="empty-state"><Icon name="bookOpen" size={34} /><h2>No lessons in this path yet</h2><p>Add published lessons linked to this learning path in PostgreSQL <code>lessons</code>.</p></div>}
   </>;
 }
 
 function Vocabulary() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All signs");
-  const [saved, setSaved] = useState([]);
   const [words, setWords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
   useEffect(() => {
     api("/vocabulary")
       .then((result) => setWords(result.words))
       .catch((error) => setLoadError(error.message))
       .finally(() => setLoading(false));
   }, []);
+  const toggleSaved = async (item) => {
+    setSaveError("");
+    try {
+      const { is_saved } = await api(`/vocabulary/${item.id}/favorite`, { method: item.is_saved ? "DELETE" : "PUT" });
+      setWords((current) => current.map((word) => word.id === item.id ? { ...word, is_saved } : word));
+    } catch (error) {
+      setSaveError(error.message);
+    }
+  };
   const categories = ["All signs", ...new Set(words.map((item) => item.category))];
   const filtered = words.filter((item) => (category === "All signs" || item.category === category) && `${item.word} ${item.meaning}`.toLowerCase().includes(search.toLowerCase()));
   return <>
     <PageTitle eyebrow="A LITTLE WORD, A BIG CONNECTION" title="FSL vocabulary" description="Discover useful Filipino Sign Language signs and add your favorites to practice later." />
-    {loadError && <p className="inline-error">Could not load vocabulary: {loadError}</p>}
+    {(loadError || saveError) && <p className="inline-error">{loadError || saveError}</p>}
     <div className="vocab-controls"><label className="search-field"><Icon name="search" size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search signs..." /><kbd>⌘ K</kbd></label><div className="filter-row">{categories.map((item) => <button key={item} className={`filter-chip ${category === item ? "filter-active" : ""}`} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
-    {loading ? <div className="empty-state">Loading vocabulary…</div> : filtered.length ? <div className="vocab-grid">{filtered.map((item) => <article className="vocab-card" key={item.word}><button className={`save-sign ${saved.includes(item.word) ? "saved" : ""}`} aria-label={`${saved.includes(item.word) ? "Unsave" : "Save"} ${item.word}`} onClick={() => setSaved((current) => current.includes(item.word) ? current.filter((word) => word !== item.word) : [...current, item.word])}>{saved.includes(item.word) ? "♥" : "♡"}</button><div className="vocab-emoji">{item.emoji || "🤟"}</div><span className="category-tag">{item.category}</span><h2>{item.word}</h2><p>{item.meaning}</p><small>{item.hint || "Practice this sign at your own pace."}</small><button className="vocab-practice" onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(item.word))}><Icon name="volume" size={16} /> Hear the word</button></article>)}</div> : <div className="empty-state"><Icon name="search" size={34} /><h2>No signs found</h2><p>Try a different search or category.</p></div>}
+    {loading ? <div className="empty-state">Loading vocabulary…</div> : filtered.length ? <div className="vocab-grid">{filtered.map((item) => <article className="vocab-card" key={item.id}><button className={`save-sign ${item.is_saved ? "saved" : ""}`} aria-label={`${item.is_saved ? "Unsave" : "Save"} ${item.word}`} onClick={() => toggleSaved(item)}>{item.is_saved ? "♥" : "♡"}</button>{item.media_url ? <img className="vocab-emoji" src={item.media_url} alt={item.word} /> : <div className="vocab-emoji"><Icon name="hand" size={38} /></div>}<span className="category-tag">{item.category}</span><h2>{item.word}</h2><p>{item.meaning}</p>{item.hint && <small>{item.hint}</small>}<button className="vocab-practice" onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(item.word))}><Icon name="volume" size={16} /> Hear the word</button></article>)}</div> : <div className="empty-state"><Icon name="search" size={34} /><h2>{words.length ? "No signs found" : "No published vocabulary yet"}</h2><p>{words.length ? "Try a different search or category." : <>Add published signs to PostgreSQL <code>vocabulary_signs</code> with a word, meaning, and category.</>}</p></div>}
   </>;
 }
 
@@ -676,8 +895,22 @@ function Practice({ onToast }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [cameraOn, setCameraOn] = useState(false);
-  const [selected, setSelected] = useState("Salamat");
+  const [activities, setActivities] = useState([]);
+  const [selectedId, setSelectedId] = useState("");
   const [checked, setChecked] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [loadingActivities, setLoadingActivities] = useState(true);
+  useEffect(() => {
+    api("/practice")
+      .then(({ activities: items }) => {
+        setActivities(items);
+        setSelectedId(items.length ? String(items[0].id) : "");
+      })
+      .catch((error) => setLoadError(error.message))
+      .finally(() => setLoadingActivities(false));
+  }, []);
+  const selectedActivity = activities.find((activity) => String(activity.id) === selectedId);
+  const content = selectedActivity?.content || {};
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -697,8 +930,12 @@ function Practice({ onToast }) {
     }
   };
   const markPractice = async () => {
+    if (!selectedActivity) return;
     try {
-      await api("/progress/complete", { method: "POST", body: JSON.stringify({ activity: "sign-practice", score: 0 }) });
+      await api("/progress/complete", {
+        method: "POST",
+        body: JSON.stringify({ activity_id: selectedActivity.id, response: { completed: true } }),
+      });
       setChecked(true);
       onToast("Nice work! Your practice has been noted.");
     } catch (error) {
@@ -707,7 +944,8 @@ function Practice({ onToast }) {
   };
   return <>
     <PageTitle eyebrow="PRACTICE MAKES CONNECTION" title="Sign practice" description="Take a breath, get comfortable, and practice a sign at your own pace." />
-    <div className="practice-layout"><section className="camera-panel"><div className="camera-top"><div><p className="eyebrow">YOUR PRACTICE SPACE</p><h2>Ready when you are</h2></div><span className={`camera-state ${cameraOn ? "camera-live" : ""}`}><i />{cameraOn ? "Camera on" : "Camera off"}</span></div><div className={`camera-view ${cameraOn ? "camera-active" : ""}`}>{cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <><div className="camera-frame"><span /><span /><span /><span /></div><div className="camera-placeholder"><div className="camera-icon"><Icon name="camera" size={28} /></div><strong>Make yourself comfy</strong><p>Your camera preview will appear here.<br />Nothing is recorded or saved.</p><Button variant="outline" onClick={toggleCamera}>Turn on camera</Button></div></>}</div><div className="camera-controls"><Button variant={cameraOn ? "outline" : "primary"} onClick={toggleCamera}>{cameraOn ? "Turn camera off" : "Enable camera"} <span>⌕</span></Button><span><Icon name="shield" size={15} /> Your video stays on your device</span></div></section><aside className="sign-guide panel"><p className="eyebrow">TODAY'S SIGN</p><h2>“{selected}”</h2><p className="guide-meaning">{selected === "Salamat" ? "Thank you" : selected === "Kumusta" ? "Hello / How are you?" : "Goodbye"} <span>·</span> Filipino</p><div className="hand-guide"><span>✋</span><div className="guide-play">▶</div></div><h3>Try it step by step</h3><ol><li><span>1</span> Relax your shoulders and take a breath.</li><li><span>2</span> Watch a trusted FSL demonstration of the sign.</li><li><span>3</span> Try it slowly in your own practice space.</li></ol><div className="guide-note"><Icon name="lightbulb" size={18} /><p>Signs can vary by region and community. Learn from Deaf FSL signers whenever you can.</p></div><label className="select-label">Choose another sign<select value={selected} onChange={(event) => { setSelected(event.target.value); setChecked(false); }}><option>Salamat</option><option>Kumusta</option><option>Paalam</option></select></label></aside></div><section className="practice-check"><div><span className="check-star">✦</span><div><strong>How did that feel?</strong><small>Take a moment to reflect. Every try counts!</small></div></div><div><Button variant={checked ? "outline" : "primary"} onClick={markPractice}>{checked ? "✓ Practice noted" : "I practiced this sign"}</Button></div></section>
+    {loadError && <p className="inline-error">{loadError}</p>}
+    {loadingActivities ? <div className="empty-state">Loading practice activities…</div> : !loadError && !activities.length ? <div className="empty-state"><Icon name="hand" size={34} /><h2>No practice activities available</h2><p>Add a published <code>practice</code> activity to PostgreSQL <code>activities</code>, including its sign, meaning, steps, and any media URL in JSONB <code>content</code>.</p></div> : activities.length > 0 && <><div className="practice-layout"><section className="camera-panel"><div className="camera-top"><div><p className="eyebrow">YOUR PRACTICE SPACE</p><h2>Ready when you are</h2></div><span className={`camera-state ${cameraOn ? "camera-live" : ""}`}><i />{cameraOn ? "Camera on" : "Camera off"}</span></div><div className={`camera-view ${cameraOn ? "camera-active" : ""}`}>{cameraOn ? <video ref={videoRef} autoPlay muted playsInline /> : <><div className="camera-frame"><span /><span /><span /><span /></div><div className="camera-placeholder"><div className="camera-icon"><Icon name="camera" size={28} /></div><strong>Make yourself comfy</strong><p>Your camera preview will appear here.<br />Nothing is recorded or saved.</p><Button variant="outline" onClick={toggleCamera}>Turn on camera</Button></div></>}</div><div className="camera-controls"><Button variant={cameraOn ? "outline" : "primary"} onClick={toggleCamera}>{cameraOn ? "Turn camera off" : "Enable camera"} <span>⌕</span></Button><span><Icon name="shield" size={15} /> Your video stays on your device</span></div></section><aside className="sign-guide panel"><p className="eyebrow">{content.category || "PRACTICE ACTIVITY"}</p><label className="select-label">Choose an activity<select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setChecked(false); }} aria-label="Choose practice activity">{activities.map((activity) => <option value={activity.id} key={activity.id}>{activity.title}</option>)}</select></label><h2>{content.word || selectedActivity.title}</h2>{content.meaning && <p className="guide-meaning">{content.meaning}</p>}{content.media_url && <img className="practice-media" src={content.media_url} alt={content.media_alt || content.word || selectedActivity.title} />}<h3>{content.instructions_title || "Instructions"}</h3>{Array.isArray(content.steps) && content.steps.length ? <ol>{content.steps.map((step, index) => <li key={`${index}-${step}`}><span>{index + 1}</span> {step}</li>)}</ol> : <p>Add a <code>steps</code> array to this activity's PostgreSQL JSONB content.</p>}{content.hint && <div className="guide-note"><Icon name="lightbulb" size={18} /><p>{content.hint}</p></div>}</aside></div><section className="practice-check"><div><span className="check-star">✦</span><div><strong>Practice completed?</strong><small>Your practice record will be saved to your account.</small></div></div><div><Button variant={checked ? "outline" : "primary"} disabled={checked} onClick={markPractice}>{checked ? "✓ Practice noted" : "I practiced this activity"}</Button></div></section></>}
   </>;
 }
 
@@ -727,89 +965,151 @@ function Scenarios({ onNavigate }) {
     <div className="scenario-banner"><Icon name="message" size={25} /><div><strong>Real moments, real connection</strong><p>Each scenario is a safe space to try, make mistakes, and grow your confidence.</p></div><span className="scenario-count">{scenarios.length} stories <b>·</b> 5–10 min each</span></div>
     {loading ? <div className="empty-state">Loading scenarios…</div> : scenarios.length ? <div className="scenario-grid">{scenarios.map((scenario, index) => {
       const colors = ["peach", "lavender", "mint"];
-      const artwork = ["🏪", "🧑‍🤝‍🧑", "🍱"];
-      const tag = scenario.category || "Everyday life";
-      return <article className="scenario-card" key={scenario.id}><div className={`scenario-art ${scenario.color || colors[index % colors.length]}`}><span>{scenario.emoji || artwork[index % artwork.length]}</span><small>{tag}</small></div><div className="scenario-content"><span className="eyebrow">{tag.toUpperCase()} SCENARIO</span><h2>{scenario.title}</h2><p>{scenario.description || "Practice useful signs in a friendly everyday conversation."}</p><div className="scenario-bottom"><span>⏱ 5–10 min <i>·</i> Beginner friendly</span><Button variant="outline" onClick={() => onNavigate("/activity")}>Start story <span>→</span></Button></div></div></article>;
-    })}</div> : <div className="empty-state"><Icon name="message" size={34} /><h2>No scenarios available yet</h2><p>New practice stories will appear here when they are published.</p></div>}
+      const tag = scenario.category || "Scenario";
+      return <article className="scenario-card" key={scenario.id}><div className={`scenario-art ${scenario.color || colors[index % colors.length]}`}><span>{scenario.emoji || <Icon name="message" size={38} />}</span><small>{tag}</small></div><div className="scenario-content"><span className="eyebrow">{tag.toUpperCase()} SCENARIO</span><h2>{scenario.title}</h2><p>{scenario.description}</p><div className="scenario-bottom"><span>{scenario.duration_minutes ? `⏱ ${scenario.duration_minutes} min` : tag}</span><Button variant="outline" onClick={() => onNavigate(`/activity/${scenario.id}`)}>Start story <span>→</span></Button></div></div></article>;
+    })}</div> : <div className="empty-state"><Icon name="message" size={34} /><h2>No scenarios available yet</h2><p>Add a published scenario activity to PostgreSQL <code>activities</code>, with prompts and choices in its JSONB <code>content</code>.</p></div>}
     <div className="gentle-note"><Icon name="sprout" size={23} /><span>There's no pressure to get it perfect. This is your space to explore.</span></div>
   </>;
 }
 
-function ScenarioActivity({ onNavigate, onToast }) {
-  const [answer, setAnswer] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const options = ["Kumusta", "Salamat", "Paalam"];
+function ScenarioActivity({ onNavigate }) {
+  const { activityId } = useParams();
+  const [activity, setActivity] = useState(null);
+  const [answers, setAnswers] = useState([]);
+  const [result, setResult] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    setActivity(null);
+    setAnswers([]);
+    setResult(null);
+    setLoadError("");
+    api(`/activities/${activityId}`)
+      .then(({ activity: item }) => setActivity(item))
+      .catch((error) => setLoadError(error.message));
+  }, [activityId]);
+  const content = activity?.content || {};
+  const questions = Array.isArray(content.questions) ? content.questions : [];
+  const questionsReady = questions.length > 0 && questions.every((question) =>
+    typeof question?.prompt === "string" && Array.isArray(question.choices)
+    && question.choices.length > 0 && question.choices.every((choice) => typeof choice?.label === "string"),
+  );
   const submit = async () => {
-    if (!answer) return onToast("Choose a sign before continuing.");
-    if (!submitted) {
-      setSubmitted(true);
-      try {
-        await api("/progress/complete", { method: "POST", body: JSON.stringify({ activity: "scenario-store", score: answer === "Kumusta" ? 100 : 60 }) });
-      } catch (error) {
-        onToast(`Your answer was checked, but progress could not sync: ${error.message}`);
-      }
-    } else onNavigate("/results");
+    if (result) return onNavigate(`/results?activity_id=${activityId}`);
+    try {
+      const saved = await api("/progress/complete", {
+        method: "POST",
+        body: JSON.stringify({ activity_id: Number(activityId), response: { answers } }),
+      });
+      setResult(saved);
+    } catch (error) {
+      setLoadError(error.message);
+    }
   };
-  return <><div className="activity-top"><button className="back-link" onClick={() => onNavigate("/scenarios")}>← All scenarios</button><span>STORY 1 OF 3</span><span>1 / 3</span></div><div className="activity-progress"><ProgressBar value={34} /></div><section className="activity-card panel"><div className="activity-art peach"><Icon name="store" size={40} /><span>✦</span></div><span className="eyebrow">AT THE SARI-SARI STORE</span><h1>A friendly hello</h1><p className="activity-prompt">You walk into your neighborhood store. The shopkeeper smiles and waves. How would you greet them?</p><div className="choice-grid">{options.map((option) => <button className={`choice-card ${answer === option ? "choice-selected" : ""} ${submitted && option === "Kumusta" ? "choice-correct" : ""}`} key={option} onClick={() => !submitted && setAnswer(option)}><span className="choice-emoji">{option === "Kumusta" ? "👋" : option === "Salamat" ? "💛" : "🌤️"}</span><span><strong>{option}</strong><small>{option === "Kumusta" ? "Hello / How are you?" : option === "Salamat" ? "Thank you" : "Goodbye"}</small></span><span className="choice-radio">{submitted && option === "Kumusta" ? "✓" : ""}</span></button>)}</div>{submitted && <div className="answer-feedback"><Icon name="star" size={21} /><div><strong>Lovely choice!</strong><p>“Kumusta” is a friendly way to start a conversation. Nice work!</p></div></div>}<div className="activity-actions"><button className="text-link" onClick={() => onToast("Hint: think of a friendly greeting to start your conversation.")}>Need a hint?</button><Button onClick={submit}>{submitted ? "Continue story" : "Check my answer"} <span>→</span></Button></div></section></>;
+  if (loadError) return <><PageTitle eyebrow="SCENARIO" title="Activity unavailable" /><p className="inline-error">{loadError}</p><Button variant="outline" onClick={() => onNavigate("/scenarios")}>← All scenarios</Button></>;
+  if (!activity) return <div className="empty-state">Loading scenario…</div>;
+  if (!questionsReady) return <div className="empty-state"><h2>This scenario needs question data</h2><p>Add a <code>questions</code> array with a prompt and labeled choices for each question in the activity's PostgreSQL JSONB <code>content</code>.</p></div>;
+  return <><div className="activity-top"><button className="back-link" onClick={() => onNavigate("/scenarios")}>← All scenarios</button><span>{activity.title}</span><span>{questions.length} question{questions.length === 1 ? "" : "s"}</span></div><div className="activity-progress"><ProgressBar value={result ? 100 : 0} /></div><section className="activity-card panel"><div className="activity-art peach"><Icon name="message" size={40} /></div><span className="eyebrow">{content.category || activity.activity_type}</span><h1>{activity.title}</h1>{content.description && <p className="activity-prompt">{content.description}</p>}{questions.map((question, questionIndex) => <div className="activity-question" key={question.id || questionIndex}><h2>{question.prompt}</h2><div className="choice-grid">{(question.choices || []).map((choice, choiceIndex) => { const choiceId = choice.id ?? choice.label; return <button className={`choice-card ${answers[questionIndex] === choiceId ? "choice-selected" : ""}`} key={choiceId ?? choiceIndex} disabled={Boolean(result)} onClick={() => setAnswers((current) => { const next = [...current]; next[questionIndex] = choiceId; return next; })}><span className="choice-emoji">{choice.emoji || <Icon name="hand" size={23} />}</span><span><strong>{choice.label}</strong>{choice.meaning && <small>{choice.meaning}</small>}</span><span className="choice-radio">{answers[questionIndex] === choiceId ? "●" : "○"}</span></button>; })}</div>{question.hint && <small>{question.hint}</small>}</div>)}{result && <div className="answer-feedback"><Icon name="star" size={21} /><div><strong>Progress saved</strong><p>Your score: {result.score}%</p></div></div>}<div className="activity-actions"><span>{content.hint || ""}</span><Button disabled={!result && (answers.length !== questions.length || answers.some((answer) => answer === undefined))} onClick={submit}>{result ? "View results" : "Submit answers"} <span>→</span></Button></div></section></>;
 }
 
 function ActivityResults({ onNavigate }) {
-  return <section className="result-card panel"><div className="result-confetti"><Icon name="sparkles" size={22} /></div><span className="result-icon"><Icon name="star" size={34} /></span><p className="eyebrow">SCENARIO COMPLETE</p><h1>You made a connection!</h1><p>Every conversation starts somewhere. You showed up and gave it a try — that's something to be proud of.</p><div className="result-stats"><div><strong>3/3</strong><small>moments explored</small></div><div><strong>+25</strong><small>kindness points</small></div><div><strong>1</strong><small>new sign practiced</small></div></div><div className="result-actions"><Button onClick={() => onNavigate("/scenarios")}>Choose another story <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/progress")}>See my progress</button></div></section>;
+  const [event, setEvent] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const { search } = useLocation();
+  useEffect(() => {
+    setEvent(null);
+    setLoadError("");
+    setLoading(true);
+    const activityId = Number(new URLSearchParams(search).get("activity_id"));
+    api("/progress")
+      .then(({ events }) => setEvent(events.find((item) => item.activity_id === activityId) || events[0] || null))
+      .catch((error) => setLoadError(error.message))
+      .finally(() => setLoading(false));
+  }, [search]);
+  if (loadError) return <p className="inline-error">{loadError}</p>;
+  if (loading) return <div className="empty-state">Loading your result…</div>;
+  if (!event) return <div className="empty-state"><h2>No completed activity found</h2><p>Finish a published scenario or practice activity to see its saved result here.</p><Button variant="outline" onClick={() => onNavigate("/scenarios")}>Choose a scenario</Button></div>;
+  return <section className="result-card panel"><div className="result-confetti"><Icon name="sparkles" size={22} /></div><span className="result-icon"><Icon name="star" size={34} /></span><p className="eyebrow">ACTIVITY COMPLETE</p><h1>{event.activity}</h1><p>Your result has been saved to your learning history.</p><div className="result-stats"><div><strong>{event.score}%</strong><small>score</small></div><div><strong>{new Date(event.created_at).toLocaleDateString()}</strong><small>completed</small></div></div><div className="result-actions"><Button onClick={() => onNavigate("/scenarios")}>Choose another story <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/progress")}>See my progress</button></div></section>;
 }
 
 function Challenge({ onNavigate, onToast }) {
-  const [selected, setSelected] = useState("");
-  const [question, setQuestion] = useState(0);
-  const words = ["Salamat", "Kumusta", "Kaibigan"];
-  return <><PageTitle eyebrow="A NEW CHAPTER IS WAITING" title="Level unlock challenge" description="A few familiar signs, one little challenge. Take it at your own pace — you can always try again." /><section className="challenge-panel panel"><div className="challenge-top"><span className="challenge-badge">✦</span><span>EXPLORER LEVEL <b>→</b> TRAILBLAZER</span><span>{question + 1} of 3</span></div><ProgressBar value={(question + 1) * 33} color="peach" /><div className="challenge-question"><div className="challenge-emoji">{question === 0 ? "👋" : question === 1 ? "💛" : "🧑‍🤝‍🧑"}</div><p className="eyebrow">WHICH WORD MATCHES THIS SIGN?</p><h2>{question === 0 ? "A warm greeting to start a conversation" : question === 1 ? "A little word that shows gratitude" : "Someone you enjoy spending time with"}</h2><div className="challenge-options">{["Kumusta", "Salamat", "Kaibigan"].map((word) => <button className={`challenge-option ${selected === word ? "challenge-selected" : ""}`} key={word} onClick={() => setSelected(word)}>{word}<span>{selected === word ? "●" : "○"}</span></button>)}</div><Button onClick={() => { if (!selected) return onToast("Pick an answer to continue."); if (selected === words[question]) { if (question === 2) onNavigate("/challenge/success"); else { setQuestion(question + 1); setSelected(""); } } else onNavigate("/challenge/try-again"); }}>Check answer <span>→</span></Button></div><p className="challenge-footnote">Take a breath. Learning isn't a race. <button onClick={() => onNavigate("/")}>Come back later</button></p></section></>;
+  const [challenges, setChallenges] = useState([]);
+  const [challengeId, setChallengeId] = useState("");
+  const [answers, setAnswers] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api("/challenges")
+      .then(({ challenges: items }) => {
+        setChallenges(items);
+        setChallengeId(items.length ? String(items[0].id) : "");
+      })
+      .catch((error) => setLoadError(error.message))
+      .finally(() => setLoading(false));
+  }, []);
+  const challenge = challenges.find((item) => String(item.id) === challengeId);
+  const questions = Array.isArray(challenge?.content?.questions) ? challenge.content.questions : [];
+  const questionsReady = questions.length > 0 && questions.every((question) =>
+    typeof question?.prompt === "string" && Array.isArray(question.choices)
+    && question.choices.length > 0 && question.choices.every((choice) => typeof choice?.label === "string"),
+  );
+  const submit = async () => {
+    if (!challenge || answers.length !== questions.length || answers.some((answer) => answer === undefined)) {
+      return onToast("Answer every question before submitting.");
+    }
+    try {
+      const result = await api("/progress/complete", {
+        method: "POST",
+        body: JSON.stringify({ activity_id: challenge.id, response: { answers } }),
+      });
+      onNavigate(result.score === 100 ? "/challenge/success" : "/challenge/try-again");
+    } catch (error) {
+      setLoadError(error.message);
+    }
+  };
+  if (loadError) return <><PageTitle eyebrow="YOUR LEARNING JOURNEY" title="Level challenge" /><p className="inline-error">{loadError}</p></>;
+  if (loading) return <div className="empty-state">Loading challenges…</div>;
+  if (!challenges.length) return <><PageTitle eyebrow="YOUR LEARNING JOURNEY" title="Level challenge" description="Challenge questions will appear here when they are published." /><div className="empty-state"><Icon name="sparkles" size={34} /><h2>No challenge available</h2><p>Add a published challenge activity to PostgreSQL <code>activities</code> with questions, choices, and correct-choice flags.</p></div></>;
+  if (!challenge || !questionsReady) return <div className="empty-state"><h2>This challenge needs question data</h2><p>Add a <code>questions</code> array with prompts and labeled choices to the activity's JSONB <code>content</code>.</p></div>;
+  return <><PageTitle eyebrow="A NEW CHAPTER IS WAITING" title={challenge.title} description={challenge.content.description} /><section className="challenge-panel panel"><div className="challenge-top"><span className="challenge-badge">✦</span><label>Choose challenge <select value={challengeId} onChange={(event) => { setChallengeId(event.target.value); setAnswers([]); }} aria-label="Choose challenge">{challenges.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label><span>{questions.length} question{questions.length === 1 ? "" : "s"}</span></div><ProgressBar value={answers.filter((answer) => answer !== undefined).length / questions.length * 100} color="peach" /><div className="challenge-question">{questions.map((question, questionIndex) => <div key={question.id || questionIndex}><p className="eyebrow">{question.instruction || "CHALLENGE"}</p><h2>{question.prompt}</h2><div className="challenge-options">{(question.choices || []).map((choice, choiceIndex) => { const choiceId = choice.id ?? choice.label; return <button className={`challenge-option ${answers[questionIndex] === choiceId ? "challenge-selected" : ""}`} key={choiceId ?? choiceIndex} onClick={() => setAnswers((current) => { const next = [...current]; next[questionIndex] = choiceId; return next; })}>{choice.label}<span>{answers[questionIndex] === choiceId ? "●" : "○"}</span></button>; })}</div></div>)}<Button onClick={submit}>Submit challenge <span>→</span></Button></div><p className="challenge-footnote">Take a breath. Learning isn't a race. <button onClick={() => onNavigate("/")}>Come back later</button></p></section></>;
 }
 
 function ChallengeFeedback({ success = false, onNavigate }) {
-  return <section className={`feedback-card panel ${success ? "feedback-success" : "feedback-retry"}`}><span className="feedback-icon"><Icon name={success ? "star" : "sprout"} size={34} /></span><p className="eyebrow">{success ? "A NEW LEVEL IS YOURS" : "EVERY TRY IS PROGRESS"}</p><h1>{success ? "You're a Trailblazer!" : "You're learning as you go."}</h1><p>{success ? "You made it through the challenge. Keep exploring, keep connecting, and keep being you." : "Some signs take a little more practice. That's completely okay. Take a breath and give it another go when you're ready."}</p>{success && <div className="unlocked-level"><span>✦</span><div><small>NEW LEVEL UNLOCKED</small><strong>Trailblazer</strong></div><Icon name="star" size={19} /></div>}<div className="result-actions"><Button onClick={() => onNavigate(success ? "/paths" : "/challenge")}>{success ? "Explore new lessons" : "Try the challenge again"} <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/")}>Back to my dashboard</button></div></section>;
+  return <section className={`feedback-card panel ${success ? "feedback-success" : "feedback-retry"}`}><span className="feedback-icon"><Icon name={success ? "star" : "sprout"} size={34} /></span><p className="eyebrow">{success ? "CHALLENGE COMPLETE" : "EVERY TRY IS PROGRESS"}</p><h1>{success ? "Well done!" : "Keep practicing."}</h1><p>{success ? "Your challenge result has been saved. Continue exploring the published learning content." : "Review the signs and try the published challenge again when you're ready."}</p><div className="result-actions"><Button onClick={() => onNavigate(success ? "/paths" : "/challenge")}>{success ? "Explore learning paths" : "Try the challenge again"} <span>→</span></Button><button className="text-link" onClick={() => onNavigate("/")}>Back to my dashboard</button></div></section>;
 }
 
 function Progress() {
-  const [summary, setSummary] = useState(null);
-  const [events, setEvents] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
+  const [progress, setProgress] = useState(null);
   const [loadError, setLoadError] = useState("");
   useEffect(() => {
     Promise.all([api("/dashboard"), api("/progress")])
-      .then(([dashboardData, progressData]) => { setSummary(dashboardData); setEvents(progressData.events); })
+      .then(([dashboardData, progressData]) => { setDashboard(dashboardData); setProgress(progressData); })
       .catch((error) => setLoadError(error.message));
   }, []);
+  const weeklyActivity = progress?.weekly_activity || [];
+  const maxDailyActivity = Math.max(1, ...weeklyActivity.map((day) => day.completed));
+  const earnedAchievements = (progress?.achievements || []).filter((achievement) => achievement.earned).length;
   return <>
     <PageTitle eyebrow="LOOK HOW FAR YOU'VE COME" title="My progress" description="Every practice session counts. Here's a little snapshot of your learning journey." action={<Button variant="outline" onClick={() => window.print()}>↓ Save my progress</Button>} />
     {loadError && <p className="inline-error">Could not refresh your progress: {loadError}</p>}
     <div className="progress-overview">
-      <StatCard icon="sprout" tone="mint" label="Current level" value="Explorer" change="2 of 4 levels" />
-      <StatCard icon="bookOpen" tone="lavender" label="Lessons done" value={`${summary?.lessons_completed ?? 12} / 28`} change="Keep it up!" />
-      <StatCard icon="flame" tone="yellow" label="Best streak" value="9 days" change="Current: 6 days" />
-      <StatCard icon="star" tone="peach" label="Practice activities" value={summary ? events.length : 3} change="Saved to your profile" />
+      <StatCard icon="bookOpen" tone="lavender" label="Lessons done" value={dashboard ? dashboard.lessons_completed : "—"} change="Completed activities of type lesson" />
+      <StatCard icon="flame" tone="yellow" label="Current streak" value={progress ? `${progress.current_streak} days` : "—"} change="Consecutive days with a completed activity" />
+      <StatCard icon="star" tone="peach" label="Completed activities" value={progress ? progress.activity_count : "—"} change="Saved to your profile" />
+      <StatCard icon="heart" tone="mint" label="Badges earned" value={progress ? earnedAchievements : "—"} change="From published achievements" />
     </div>
     <div className="progress-content-grid">
       <section className="panel progress-chart-panel">
-        <div className="panel-heading"><div><p className="eyebrow">SHOWING UP IS EVERYTHING</p><h2>Your learning rhythm</h2></div><select className="select-compact" aria-label="Chart period"><option>This week</option><option>This month</option></select></div>
-        <div className="large-chart">{[30,60,45,90,52,75,22].map((value,index)=><div key={index}><span className="large-chart-bar" style={{height:`${value}%`}}/><small>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</small></div>)}</div>
-        <p className="chart-caption">You've practiced on 4 days this week. Just one more to reach your goal! <Icon name="sparkles" size={16} /></p>
+        <div className="panel-heading"><div><p className="eyebrow">SHOWING UP IS EVERYTHING</p><h2>Your learning rhythm</h2></div><span className="soft-tag">Last 7 days</span></div>
+        {weeklyActivity.length ? <div className="large-chart">{weeklyActivity.map((day) => <div key={day.activity_date}><span className="large-chart-bar" style={{height: `${Math.max(3, (day.completed / maxDailyActivity) * 100)}%`}}/><small>{new Date(`${day.activity_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" })}</small></div>)}</div> : <div className="empty-state"><p>Completed activity will appear here once progress has been saved.</p></div>}
+        <p className="chart-caption">Daily totals are calculated from your completed PostgreSQL activity records.</p>
       </section>
-      <section className="panel level-panel">
-        <p className="eyebrow">YOUR LEARNING PATH</p><h2>Growing at your pace</h2>
-        <div className="level-steps">
-          <div className="level-step complete"><span>✓</span><div><strong>Seedling</strong><small>Completed · 120 points</small></div></div>
-          <div className="level-step current"><span>✦</span><div><strong>Explorer</strong><small>340 / 400 points</small><ProgressBar value={85} /></div></div>
-          <div className="level-step"><span>3</span><div><strong>Trailblazer</strong><small>Unlock at 400 points</small></div></div>
-          <div className="level-step"><span>4</span><div><strong>Community star</strong><small>There's more to discover</small></div></div>
-        </div>
-      </section>
+      <section className="panel level-panel"><p className="eyebrow">RECENT ACTIVITY</p><h2>Your completed work</h2>{progress?.events?.length ? <div className="timeline">{progress.events.slice(0, 6).map((event, index) => <div key={`${event.activity}-${event.created_at}-${index}`}><i className={`timeline-dot ${["mint", "peach", "lavender"][index % 3]}`} /><span><strong>{event.activity} · {event.score}%</strong><small>{new Date(event.created_at).toLocaleString()}</small></span></div>)}</div> : <p>No completed activities yet. Publish and complete a practice or scenario activity to begin tracking progress.</p>}</section>
     </div>
     <section className="panel achievement-list">
-      <div className="panel-heading"><div><p className="eyebrow">MILESTONES TO CELEBRATE</p><h2>Your badges</h2></div><span className="soft-tag">3 earned</span></div>
-      <div className="badge-list">
-        <div><Icon name="sun" size={22} /><strong>Early bird</strong><small>Learned before 9 am</small></div>
-        <div><Icon name="flame" size={22} /><strong>On a roll</strong><small>Practiced 5 days in a row</small></div>
-        <div><Icon name="heart" size={22} /><strong>Kind communicator</strong><small>Learned 10 everyday signs</small></div>
-        <div className="badge-locked"><Icon name="globe" size={22} /><strong>Sign explorer</strong><small>Learn 20 new signs</small></div>
-      </div>
+      <div className="panel-heading"><div><p className="eyebrow">MILESTONES TO CELEBRATE</p><h2>Your badges</h2></div><span className="soft-tag">{earnedAchievements} earned</span></div>
+      {progress?.achievements?.length ? <div className="badge-list">{progress.achievements.map((achievement) => <div className={achievement.earned ? "" : "badge-locked"} key={achievement.id}><Icon name={achievement.earned ? "star" : "lock"} size={22} /><strong>{achievement.name}</strong><small>{achievement.description}</small></div>)}</div> : <div className="empty-state"><p>No published achievements yet. Add definitions to the PostgreSQL <code>achievements</code> table.</p></div>}
     </section>
   </>;
 }
@@ -819,6 +1119,7 @@ function InstructorDashboard({ user, onNavigate }) {
   const [roster, setRoster] = useState([]);
   const [classrooms, setClassrooms] = useState([]);
   const [loadError, setLoadError] = useState("");
+  const [rosterLoaded, setRosterLoaded] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -835,7 +1136,8 @@ function InstructorDashboard({ user, onNavigate }) {
         })));
         setClassrooms(classroomsData.classrooms);
       })
-      .catch((error) => setLoadError(error.message));
+      .catch((error) => setLoadError(error.message))
+      .finally(() => setRosterLoaded(true));
   }, []);
 
   const firstName = user.name.split(" ")[0];
@@ -858,7 +1160,7 @@ function InstructorDashboard({ user, onNavigate }) {
           <div className="dashboard-card-heading"><div><p className="dashboard-kicker">YOUR PEOPLE</p><h2>Learner snapshots</h2></div><button className="dashboard-inline-link" onClick={() => onNavigate("/learners")}>All learners <span>→</span></button></div>
           {roster.length > 0
             ? <LearnerTable rows={roster.slice(0, 4)} onNavigate={onNavigate} />
-            : !loadError && <p className="dashboard-loading">Loading your learner roster…</p>}
+            : !rosterLoaded && !loadError ? <p className="dashboard-loading">Loading your learner roster…</p> : !loadError && <p className="empty-table">No active learners are connected to your classrooms yet.</p>}
         </section>
         <section className="dashboard-card instructor-classrooms-card">
           <div className="dashboard-card-heading"><div><p className="dashboard-kicker">LEARN TOGETHER</p><h2>Your classrooms</h2></div><span className="classroom-card-mark"><Icon name="school" size={22} /></span></div>
@@ -881,18 +1183,19 @@ function InstructorDashboard({ user, onNavigate }) {
 }
 
 function LearnerTable({ rows, onNavigate }) {
-  return <div className="table-scroll"><table className="data-table"><thead><tr><th>LEARNER</th><th>LEVEL</th><th>LESSONS</th><th>ACCURACY</th><th>STREAK</th><th /></tr></thead><tbody>{rows.map((learner) => <tr key={learner.id}><td><button className="learner-name" onClick={() => onNavigate(`/learners/${learner.id}`)}><span className={`avatar avatar-${learner.color}`}>{learner.initials}</span><span><strong>{learner.name}</strong><small>Last active today</small></span></button></td><td><span className="soft-tag">{learner.level}</span></td><td>{learner.lessons}</td><td><div className="table-progress">{learner.accuracy}%<ProgressBar value={learner.accuracy} /></div></td><td className="streak-cell"><Icon name="flame" size={16} /> {learner.streak} days</td><td><button className="more-button" onClick={() => onNavigate(`/learners/${learner.id}`)} aria-label={`View ${learner.name}`}>···</button></td></tr>)}</tbody></table></div>;
+  return <div className="table-scroll"><table className="data-table"><thead><tr><th>LEARNER</th><th>LEVEL</th><th>ACTIVITIES</th><th>ACCURACY</th><th>LAST ACTIVE</th><th /></tr></thead><tbody>{rows.map((learner) => <tr key={learner.id}><td><button className="learner-name" onClick={() => onNavigate(`/learners/${learner.id}`)}><span className={`avatar avatar-${learner.color || "mint"}`}>{learner.initials || learner.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span><strong>{learner.name}</strong></span></button></td><td><span className="soft-tag">{learner.level}</span></td><td>{learner.activities ?? "—"}</td><td><div className="table-progress">{learner.accuracy == null ? "—" : `${learner.accuracy}%`}{learner.accuracy != null && <ProgressBar value={learner.accuracy} />}</div></td><td>{learner.last_active ? new Date(learner.last_active).toLocaleDateString() : "—"}</td><td><button className="more-button" onClick={() => onNavigate(`/learners/${learner.id}`)} aria-label={`View ${learner.name}`}>···</button></td></tr>)}</tbody></table></div>;
 }
 
 function LearnerManagement({ onNavigate }) {
   const [search, setSearch] = useState("");
   const [roster, setRoster] = useState([]);
   const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    api("/instructor/learners").then((result) => setRoster(result.learners)).catch((error) => setLoadError(error.message));
+    api("/instructor/learners").then((result) => setRoster(result.learners)).catch((error) => setLoadError(error.message)).finally(() => setLoading(false));
   }, []);
   const filtered = roster.filter((learner) => learner.name.toLowerCase().includes(search.toLowerCase()));
-  return <>  <PageTitle eyebrow="HELP EVERY LEARNER SHINE" title="Learner management" description="Get to know your learners' progress, celebrate their wins, and find where they might need a hand." action={<Button onClick={() => onNavigate("/classrooms")}>＋ Add learners</Button>} /><section className="panel learner-management-panel"><div className="panel-heading"><div><p className="eyebrow">YOUR LEARNERS</p><h2>{roster.length} learners</h2></div><label className="search-field compact-search"><Icon name="search" size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a learner" /></label></div>{loadError && <p className="inline-error">Could not load learners: {loadError}</p>}<LearnerTable rows={filtered} onNavigate={onNavigate} />{filtered.length === 0 && <div className="empty-table">No learners match that name yet.</div>}<div className="table-footer"><span>Showing {filtered.length} of {roster.length} learners</span><div><button disabled>← Previous</button><button className="page-number">1</button><button>2</button><button>3</button><button>Next →</button></div></div></section><div className="gentle-note"><Icon name="heart" size={18} /><span>Learner information is private to your classroom. Please handle it with care.</span></div></>;
+  return <>  <PageTitle eyebrow="HELP EVERY LEARNER SHINE" title="Learner management" description="Get to know your learners' progress, celebrate their wins, and find where they might need a hand." action={<Button onClick={() => onNavigate("/classrooms")}>＋ Add learners</Button>} /><section className="panel learner-management-panel"><div className="panel-heading"><div><p className="eyebrow">YOUR LEARNERS</p><h2>{roster.length} learners</h2></div><label className="search-field compact-search"><Icon name="search" size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a learner" /></label></div>{loadError && <p className="inline-error">Could not load learners: {loadError}</p>}{filtered.length > 0 && <LearnerTable rows={filtered} onNavigate={onNavigate} />}{loading && <div className="empty-table">Loading your learner roster…</div>}{!loading && !loadError && filtered.length === 0 && <div className="empty-table">{roster.length ? "No learners match that name." : "No active learners are connected to your classrooms yet."}</div>}<div className="table-footer"><span>Showing {filtered.length} of {roster.length} learners</span></div></section><div className="gentle-note"><Icon name="heart" size={18} /><span>Learner information is private to your classroom. Please handle it with care.</span></div></>;
 }
 
 function LearnerDetails() {
@@ -921,7 +1224,7 @@ function LearnerDetails() {
   if (!learner) return <div className="empty-state">Loading learner details…</div>;
 
   const initials = learner.name.split(" ").map((part) => part[0]).slice(0, 2).join("");
-  return <><PageTitle eyebrow="LEARNER PROFILE" title={learner.name} description={`A closer look at ${learner.name.split(" ")[0]}'s learning journey.`} action={<span className="soft-tag">CLASSROOM LEARNER</span>} /><div className="learner-detail-hero panel"><span className="avatar avatar-large avatar-mint">{initials}</span><div><h2>{learner.name}</h2><p>{learner.level} level · Joined through your classroom</p></div><Button variant="outline" onClick={() => window.print()}>↓ Export summary</Button></div><div className="stats-grid"><StatCard icon="bookOpen" tone="lavender" label="Completed activities" value={learner.lessons} change="Since joining" /><StatCard icon="hand" tone="peach" label="Practice accuracy" value={`${learner.accuracy}%`} change="Across completed activities" /><StatCard icon="flame" tone="yellow" label="Current streak" value={`${learner.streak} days`} change="Streak tracking coming soon" /><StatCard icon="sprout" tone="mint" label="Current level" value={learner.level} change="Making steady progress" /></div><div className="progress-content-grid"><section className="panel"><p className="eyebrow">GROWING EVERY WEEK</p><h2>Recent activity</h2>{events.length ? <div className="timeline">{events.map((event, index) => <div key={`${event.activity}-${event.created_at}-${index}`}><i className={`timeline-dot ${["mint", "peach", "lavender"][index % 3]}`} /><span><strong>{event.activity} · {event.score}%</strong><small>{new Date(event.created_at).toLocaleString()}</small></span></div>)}</div> : <p>No completed activities yet. Their progress will appear here as they practice.</p>}</section><section className="panel"><p className="eyebrow">A LITTLE ENCOURAGEMENT</p><h2>Strengths & next steps</h2><div className="insight-row"><Icon name="star" size={20} /><div><strong>Keep celebrating each try</strong><small>Consistent practice helps build confidence.</small></div></div><div className="insight-row"><Icon name="sprout" size={20} /><div><strong>Explore a new sign together</strong><small>Small steps make a meaningful difference.</small></div></div><Button variant="outline" className="full-button">Send a kind note</Button></section></div></>;
+  return <><PageTitle eyebrow="LEARNER PROFILE" title={learner.name} description={`A closer look at ${learner.name.split(" ")[0]}'s learning journey.`} action={<span className="soft-tag">CLASSROOM LEARNER</span>} /><div className="learner-detail-hero panel"><span className="avatar avatar-large avatar-mint">{initials}</span><div><h2>{learner.name}</h2><p>{learner.level} level · Joined through your classroom</p></div><Button variant="outline" onClick={() => window.print()}>↓ Export summary</Button></div><div className="stats-grid"><StatCard icon="bookOpen" tone="lavender" label="Completed activities" value={learner.activities} change="Since joining" /><StatCard icon="hand" tone="peach" label="Practice accuracy" value={learner.accuracy == null ? "—" : `${learner.accuracy}%`} change="Across completed activities" /><StatCard icon="sun" tone="yellow" label="Last active" value={learner.last_active ? new Date(learner.last_active).toLocaleDateString() : "—"} change={learner.last_active ? new Date(learner.last_active).toLocaleTimeString() : "No completed activity yet"} /><StatCard icon="sprout" tone="mint" label="Current level" value={learner.level} change="Based on completed activity accuracy" /></div><div className="progress-content-grid"><section className="panel"><p className="eyebrow">GROWING EVERY WEEK</p><h2>Recent activity</h2>{events.length ? <div className="timeline">{events.map((event, index) => <div key={`${event.activity}-${event.created_at}-${index}`}><i className={`timeline-dot ${["mint", "peach", "lavender"][index % 3]}`} /><span><strong>{event.activity} · {event.score}%</strong><small>{new Date(event.created_at).toLocaleString()}</small></span></div>)}</div> : <p>No completed activities yet. Their progress will appear here as they practice.</p>}</section><section className="panel"><p className="eyebrow">A LITTLE ENCOURAGEMENT</p><h2>Strengths & next steps</h2><div className="insight-row"><Icon name="star" size={20} /><div><strong>Keep celebrating each try</strong><small>Consistent practice helps build confidence.</small></div></div><div className="insight-row"><Icon name="sprout" size={20} /><div><strong>Explore a new sign together</strong><small>Small steps make a meaningful difference.</small></div></div></section></div></>;
 }
 
 function Classrooms({ onNavigate }) {
@@ -1012,7 +1315,16 @@ function CreateClassroom({ onNavigate, onToast }) {
       const [name, setName] = useState(user.name);
       const [age, setAge] = useState(user.learner_type);
       const [goal, setGoal] = useState(user.learning_goal);
-      return <><PageTitle eyebrow="THIS IS YOUR SPACE" title="My profile" description="Make your learning space feel a little more like you." /><form className="profile-form panel" onSubmit={(event) => { event.preventDefault(); onSave({ name: name.trim() || user.name, learner_type: age, learning_goal: goal }); }}><div className="profile-edit-head"><span className="avatar avatar-large avatar-mint">{name.split(" ").map((part) => part[0]).slice(0, 2).join("") || "AR"}</span><div><h2>{name || "Your name"}</h2><p>Explorer · Joined this year</p></div><button type="button" className="button button-outline" onClick={() => document.getElementById("profile-name")?.focus()}>Edit details</button></div><div className="profile-fields"><label>Display name<input id="profile-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={70} /></label><label>Email address<input type="email" value={user.email || ""} readOnly /></label><label>Learning as<select value={age} onChange={(event) => setAge(event.target.value)}><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Everyday conversations</option><option>Connect with family</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label></div><div className="form-actions"><Link className="text-link" to="/settings">Account settings →</Link><Button type="submit">Save changes</Button></div></form></>;
+      const originalName = user.name || "";
+      const hasChanges = name.trim() !== originalName.trim()
+        || age !== user.learner_type
+        || goal !== user.learning_goal;
+      const canSave = Boolean(name.trim() && user.email?.trim() && age.trim() && goal.trim() && hasChanges);
+
+      return <><PageTitle eyebrow="THIS IS YOUR SPACE" title="My profile" description="Make your learning space feel a little more like you." /><form className="profile-form panel" onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) onSave({ name: name.trim(), learner_type: age, learning_goal: goal });
+      }}><div className="profile-edit-head"><span className="avatar avatar-large avatar-mint">{name.split(" ").map((part) => part[0]).slice(0, 2).join("") || "AR"}</span><div><h2>{name || "Your name"}</h2><p>{user.role === "instructor" ? "Instructor account" : "Learner account"}{user.created_at ? ` · Joined ${new Date(user.created_at).toLocaleDateString()}` : ""}</p></div><button type="button" className="button button-outline" onClick={() => document.getElementById("profile-name")?.focus()}>Edit details</button></div><div className="profile-fields"><label>Display name<input id="profile-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={70} /></label><label>Email address<input type="email" value={user.email || ""} readOnly /></label><label>Learning as<select value={age} onChange={(event) => setAge(event.target.value)}><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Everyday conversations</option><option>Connect with family</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label></div><div className="form-actions"><Link className="text-link" to="/settings">Account settings →</Link><Button type="submit" disabled={!canSave}>Save changes</Button></div></form></>;
     }
 
     function Settings({ settings, setSettings, onSave, onToast }) {
@@ -1063,7 +1375,17 @@ function CreateClassroom({ onNavigate, onToast }) {
           setLoading(false);
         }
       };
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sparkles" size={24} /></span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" onClick={() => window.location.assign(`/api/auth/google?flow=${mode}`)}>◎ {isSignup ? "Sign up with Google" : "Continue with Google"}</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google securely verifies your email. {isSignup ? "Your account will be created after verification." : "Use the Google account linked to your Talinturo account."}</p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="hand" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      const startGoogleAuth = async () => {
+        setLoading(true);
+        try {
+          await api("/health");
+          window.location.assign(`/api/auth/google?flow=${mode}`);
+        } catch (error) {
+          onToast(`Couldn't reach the account service. Start the Flask API and try again. ${error.message}`);
+          setLoading(false);
+        }
+      };
+      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sparkles" size={24} /></span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={70} autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" disabled={loading} onClick={startGoogleAuth}>{loading ? "Connecting…" : `◎ ${isSignup ? "Sign up with Google" : "Continue with Google"}`}</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google securely verifies your email. {isSignup ? "Your account will be created after verification." : "Use the Google account linked to your Talinturo account."}</p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="hand" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function ForgotPassword({ onToast }) {
@@ -1076,10 +1398,27 @@ function CreateClassroom({ onNavigate, onToast }) {
       return <section className="not-found panel"><Icon name="lock" size={44} /><p className="eyebrow">ACCOUNT RECOVERY</p><h1>Password reset isn't configured.</h1><p>This local demo has no email delivery or reset-token service. Ask your administrator for help, or return to sign in.</p><Link className="button button-primary" to="/login">Back to sign in <span>→</span></Link></section>;
     }
 
-    function ProfileSetup({ onDone }) {
-      const [goal, setGoal] = useState("Connect with family");
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sprout" size={24} /></span><p className="eyebrow">LET'S MAKE THIS YOURS</p><h1>What brings you here?</h1><p className="auth-description">We'll use this to make your learning journey feel a little more personal.</p><form onSubmit={(event) => { event.preventDefault(); onDone(); }}><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Connect with family</option><option>Everyday conversations</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label><label>I'm learning as<select defaultValue="Adult learner"><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label><Button className="full-button" type="submit">Let's get started <span>→</span></Button></form><button className="skip-setup" onClick={onDone}>I'll do this later</button></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="globe" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Your story.<br />Your pace.</h2><p>There is no one way to learn. We'll meet you right where you are.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+function ProfileSetup({ onDone }) {
+  const [goal, setGoal] = useState("Connect with family");
+  const [learnerType, setLearnerType] = useState("Adult learner");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await onDone({ learner_type: learnerType, learning_goal: goal });
+    } catch (saveError) {
+      setError(`Couldn't save your profile: ${saveError.message}`);
+    } finally {
+      setSaving(false);
     }
+  };
+
+  return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sprout" size={24} /></span><p className="eyebrow">LET'S MAKE THIS YOURS</p><h1>What brings you here?</h1><p className="auth-description">We'll use this to make your learning journey feel a little more personal.</p><form onSubmit={submit}><label>My learning goal<select value={goal} onChange={(event) => setGoal(event.target.value)}><option>Connect with family</option><option>Everyday conversations</option><option>Learn for my classroom</option><option>Explore Filipino culture</option></select></label><label>I'm learning as<select value={learnerType} onChange={(event) => setLearnerType(event.target.value)}><option>Adult learner</option><option>Child learner</option><option>Parent or caregiver</option><option>Educator</option></select></label>{error && <p className="inline-error" role="alert">{error}</p>}<Button className="full-button" type="submit" disabled={saving}>{saving ? "Saving…" : "Let's get started"} <span>→</span></Button></form></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="globe" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Your story.<br />Your pace.</h2><p>There is no one way to learn. We'll meet you right where you are.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+}
 
     function NotFound({ onNavigate }) {
       return <section className="not-found panel"><Icon name="compass" size={44} /><p className="eyebrow">A LITTLE DETOUR</p><h1>We can't find that page.</h1><p>Looks like this path has changed. Let's find another way together.</p><Button onClick={() => onNavigate("/")}>Back to my dashboard <span>→</span></Button></section>;

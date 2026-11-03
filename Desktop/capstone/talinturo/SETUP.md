@@ -24,7 +24,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The API listens at `http://127.0.0.1:5000`. By default, it creates `backend/talinturo.sqlite3` and seeds local demo accounts and sample data. The database is local and excluded from version control.
+The API listens at `http://127.0.0.1:5000`. Without `DATABASE_URL`, it creates a local SQLite database for development and tests. Demo accounts are not created unless `TALINTURO_DEMO_MODE=true`. Learning content and progress APIs require PostgreSQL; SQLite does not provide sample-content fallbacks.
 
 If PowerShell does not allow activating the virtual environment, you can invoke its Python directly instead:
 
@@ -46,35 +46,87 @@ Open the URL Vite prints, normally `http://127.0.0.1:5173`. Vite forwards reques
 
 ### Connect PostgreSQL
 
-The backend uses the PostgreSQL schema in the `public` schema whenever `DATABASE_URL` is set. It expects the tables from the Talinturo schema (`users`, `oauth_accounts`, `user_preferences`, `classrooms`, `classroom_memberships`, `learning_paths`, `lessons`, `activities`, `vocabulary_signs`, `activity_attempts`, `lesson_progress`, `achievements`, and `user_achievements`) to exist before the API starts. The API does not create or alter PostgreSQL tables.
+The backend uses PostgreSQL whenever `DATABASE_URL` is set. `backend/talinturo.sql` is a PostgreSQL dump containing the base tables, and `backend/talinturo_backend_migration.sql` adds the tables and columns required by the current API. The dump contains no account or learning-content rows.
 
-In the same PowerShell terminal used to start Flask, set a connection URL for your PostgreSQL server and a private Flask session key:
+#### If the database is empty
 
 ```powershell
 $env:PGUSER = "postgres"
 $env:PGPASSWORD = Read-Host "PostgreSQL password"
-$env:DATABASE_URL = "postgresql://localhost:5432/postgres"
-$env:TALINTURO_SECRET_KEY = (python -c "import secrets; print(secrets.token_urlsafe(32))")
-$env:TALINTURO_DEMO_MODE = "true"
-python app.py
+createdb -U $env:PGUSER talinturo
+psql -U $env:PGUSER -d talinturo -v ON_ERROR_STOP=1 -f .\backend\talinturo.sql
+psql -U $env:PGUSER -d talinturo -v ON_ERROR_STOP=1 -f .\backend\talinturo_backend_migration.sql
 ```
 
-Replace the username, host, port, and database with your PostgreSQL connection details. `PGPASSWORD` is entered at the prompt and is not included in the URL or command history. Keep it and the session key private; do not commit them. The API validates the required tables at startup and `/api/health` checks the active database connection.
+Run `createdb` and restore only when creating a brand-new empty database. The dump sets ownership to the PostgreSQL role `postgres`, so restore as that role (or adjust ownership in the dump for your database administrator). If you already loaded `talinturo.sql` into the database, do not restore it again; apply only the migration:
 
-When PostgreSQL is selected with demo mode enabled, the API creates `teacher@example.com` and `learner@example.com` if they do not already exist, plus a demo classroom, starter learning path, vocabulary, and scenarios. Both demo accounts use `Talinturo2025!`; keep demo mode enabled only for local development. These starter rows are inserted only when their unique slugs are absent. New accounts, classroom invitations, vocabulary and published paths, preferences, and activity progress are stored in the PostgreSQL tables. Progress submissions are recorded as completed rows in `activity_attempts`, linked to an unpublished practice activity when needed.
+```powershell
+psql -U postgres -d talinturo -v ON_ERROR_STOP=1 -f .\backend\talinturo_backend_migration.sql
+```
 
-Without `DATABASE_URL`, the backend continues to use SQLite. SQLite and PostgreSQL are separate databases; switching to PostgreSQL does not automatically copy local SQLite accounts or activity data.
+The migration is additive and safe to rerun. It creates OAuth, preferences, and saved-vocabulary tables; adds JSONB lesson content and publication/sort fields for achievements; and permits the `challenge` activity type. It also adds case-insensitive email uniqueness. Before applying it to an existing database with users, check for duplicate email addresses; duplicates must be resolved first:
+
+```sql
+SELECT lower(email) AS normalized_email, count(*)
+FROM users
+GROUP BY lower(email)
+HAVING count(*) > 1;
+```
+
+Then configure the backend to use this database, in the same PowerShell window where Flask will run:
+
+```powershell
+$env:PGHOST = "127.0.0.1"
+$env:PGPORT = "5432"
+$env:PGDATABASE = "talinturo"
+$env:PGUSER = "postgres"
+$env:PGPASSWORD = Read-Host "PostgreSQL password"
+$env:DATABASE_URL = "postgresql://127.0.0.1:5432/talinturo"
+$env:TALINTURO_SECRET_KEY = (.\backend\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))")
+$env:TALINTURO_DEMO_MODE = "false"
+.\backend\.venv\Scripts\python.exe backend\app.py
+```
+
+If PostgreSQL is remote or uses a different username, host, or port, change those values. Keep the database password and session key private. The API validates its required tables and columns at startup; `/api/health` checks the active database connection. Account signup/login, Google OAuth, profile, preferences, learning content, and progress all use the database selected by `DATABASE_URL`. SQLite accounts are not automatically copied into PostgreSQL.
+
+In another PowerShell window from the project root, start the frontend with `npm run dev`. Open `http://127.0.0.1:5173`; Vite proxies `/api` requests to Flask. Both servers must remain running.
+
+### Records needed to populate the app
+
+The app intentionally does not generate FSL lessons, signs, questions, badges, learners, or progress. Add and publish records in PostgreSQL:
+
+- `learning_paths`: `slug`, `title`, `description`, `level`, `sort_order`, `is_published`.
+- `lessons`: `path_id`, `slug`, `title`, `duration_minutes`, `sort_order`, `is_published`, and `content` (JSONB, added by the migration). Lesson `content` should include a `description` and a `sections` array of `{ "title": "...", "body": "..." }`.
+- `vocabulary_signs`: `slug`, `word`, `meaning`, `category`, optional `hint` and `media_url`, and `is_published`.
+- `activities`: unique `slug`, `activity_type` (`practice`, `scenario`, or `challenge`), `title`, `content` (JSONB), `sort_order`, and `is_published`. The migration expands the dump's activity type constraint to allow `challenge`.
+  - Scenario/challenge `content` can include `category`, `description`, `emoji`, `color`, and `duration_minutes`; it uses `questions: [{ "prompt": "...", "choices": [{ "id": "...", "label": "...", "meaning": "...", "is_correct": true }] }]`. Exactly one choice per question should be correct.
+  - Practice `content` uses `word`, `meaning`, `steps` (array of strings), and optional `category`, `hint`, and `media_url`.
+- `achievements`: published achievement `title` (used as the API's display name), `description`, `criteria` (JSONB), `sort_order`, and `is_published`. The last two columns are added by the migration. `user_achievements` links unlocked definitions to users through `user_id` and `achievement_id`.
+- `activity_attempts` and `lesson_progress` are learner-generated records. Completing published activities and lessons creates these records; do not prefill fake completion metrics.
+
+The backend exposes learner-facing APIs for published content and progress:
+
+- `GET /api/paths` and `GET /api/paths/<id>` return published paths, lessons, lesson JSON content, and the signed-in learner's progress.
+- `GET /api/vocabulary` returns published signs; `PUT`/`DELETE /api/vocabulary/<id>/favorite` saves/removes a learner's favorite.
+- `GET /api/scenarios`, `/api/challenges`, and `/api/practice` list published activities by type. `GET /api/activities/<id>` returns one activity.
+- `PUT /api/lessons/<id>/progress` saves an in-progress percentage from 1–99 without decreasing existing progress. `POST /api/lessons/<id>/complete` records 100% completion.
+- `POST /api/progress/complete` validates submitted answers against the published activity questions and stores a scored attempt.
+- `GET /api/progress` returns activity history, weekly activity counts, earned achievement status, streak, and recent lesson progress. `GET /api/dashboard` returns learner summary metrics.
+
+These APIs require authentication. Content creation and publication are currently done by inserting/updating the PostgreSQL records directly; the app does not provide an admin content editor or fabricate FSL content.
+
+The app's `/api/data/readiness` response and dashboard empty state list missing published content. Have FSL vocabulary and instructional material reviewed by Deaf FSL signers and qualified educators before publishing; the interface does not supply authoritative language content. SQLite and PostgreSQL are separate databases, and local SQLite accounts are not copied when switching to PostgreSQL.
 
 ## Demo accounts
 
-The development app opens on the public landing page. Sign in with either demo account below to open the learner or instructor workspace; once signed in, use **Instructor view** in the top bar to switch demo roles.
+Optional local SQLite demo accounts are created only when `TALINTURO_DEMO_MODE=true` is set before the backend starts. They are for local interface testing; they do not supply PostgreSQL learning content.
 
 | Role | Email | Password |
 | --- | --- | --- |
 | Learner | `learner@example.com` | `Talinturo2025!` |
 | Instructor | `teacher@example.com` | `Talinturo2025!` |
 
-New accounts created through sign up are stored in the local database with salted PBKDF2 password hashes. Google sign-in creates or links an account only when Google confirms the email address. Password-reset email delivery is not configured in this development setup.
+New accounts created through sign up are stored in the configured database with salted PBKDF2 password hashes. Google sign-in creates or links an account only when Google confirms the email address. Password-reset email delivery is not configured in this development setup.
 
 ## Google sign-in and sign-up setup
 
@@ -133,7 +185,7 @@ The API uses these optional environment variables:
 | `TALINTURO_SECRET_KEY` | Development-only key | Flask session signing. Set a strong private value before deployment. |
 | `DATABASE_URL` | Unset | PostgreSQL connection URL. When set, PostgreSQL is used instead of SQLite. |
 | `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path when `DATABASE_URL` is unset. |
-| `TALINTURO_DEMO_MODE` | `true` | Enables the demo role-switch endpoint. |
+| `TALINTURO_DEMO_MODE` | `false` | Enables local demo accounts and demo role switching. |
 | `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when serving over HTTPS. |
 | `FLASK_DEBUG` | `false` | Enables Flask debug mode when set to `true`; use only for local development. |
 

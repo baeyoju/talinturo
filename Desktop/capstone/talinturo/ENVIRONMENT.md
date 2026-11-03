@@ -6,8 +6,8 @@ Talinturo reads backend configuration from environment variables when Flask star
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | Unset | PostgreSQL connection URL. When set, the backend uses PostgreSQL instead of SQLite. The expected tables must already exist in the `public` schema. |
-| `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path. Used only when `DATABASE_URL` is unset. |
+| `DATABASE_URL` | Unset | PostgreSQL connection URL. Learning content and progress endpoints require it. Restore `backend/talinturo.sql` into a new database, then apply `backend/talinturo_backend_migration.sql`. |
+| `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path for local authentication development and tests when `DATABASE_URL` is unset. |
 | `PGHOST` | Driver default | PostgreSQL server host, when not specified in `DATABASE_URL`. |
 | `PGPORT` | Driver default | PostgreSQL server port, when not specified in `DATABASE_URL`. |
 | `PGDATABASE` | Driver default | PostgreSQL database name, when not specified in `DATABASE_URL`. |
@@ -19,7 +19,7 @@ Example PowerShell setup for a local PostgreSQL server:
 ```powershell
 $env:PGUSER = "postgres"
 $env:PGPASSWORD = Read-Host "PostgreSQL password"
-$env:DATABASE_URL = "postgresql://localhost:5432/postgres"
+$env:DATABASE_URL = "postgresql://127.0.0.1:5432/talinturo"
 ```
 
 The password is entered at the prompt rather than included in the connection URL. If your server uses different connection details, update the URL or the corresponding `PG*` variables.
@@ -29,7 +29,7 @@ The password is entered at the prompt rather than included in the connection URL
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TALINTURO_SECRET_KEY` | `local-development-key-change-before-deploy` | Signs Flask sessions and protects OAuth state. Set a strong, private value; the default is for local development only. |
-| `TALINTURO_DEMO_MODE` | `true` | Enables demo sign-in and PostgreSQL demo-data seeding. Use `false` outside local development. |
+| `TALINTURO_DEMO_MODE` | `false` | Enables optional local demo accounts and role switching. It does not seed PostgreSQL learning content. |
 | `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when the backend is served over HTTPS. Leave `false` for local HTTP development. |
 | `FLASK_DEBUG` | `false` | Enables Flask debug mode when set to `true`. Use only for local development. |
 
@@ -67,7 +67,8 @@ The login screen uses the OAuth `login` flow and expects an existing Talinturo a
 - Never commit passwords, OAuth secrets, session keys, or a populated `.env` file.
 - Values set with `$env:NAME = "value"` apply only to the current PowerShell session and its child processes.
 - The backend does not automatically load a `.env` file. Configure environment variables in the process manager or terminal that starts Flask.
-- `DATABASE_URL` selects PostgreSQL; it does not migrate or copy data from the SQLite database.
+- `DATABASE_URL` selects PostgreSQL; it does not migrate or copy data from the SQLite database. It also does not generate sample content.
+- The backend expects the schema in `backend/talinturo.sql` plus `backend/talinturo_backend_migration.sql`. Apply the migration before starting Flask; startup reports missing tables or columns.
 - Before public deployment, disable demo mode, set a private session key, use HTTPS and secure cookies, and configure production access controls.
 
 For installation and run instructions, see [SETUP.md](SETUP.md).

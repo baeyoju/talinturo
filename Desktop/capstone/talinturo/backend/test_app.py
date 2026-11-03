@@ -12,15 +12,29 @@ class TalinturoApiTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         backend.DATABASE = Path(self.temp_dir.name) / "test.sqlite3"
+        self.previous_demo_mode = backend.DEMO_MODE
+        backend.DEMO_MODE = True
         backend.initialize_database()
         backend.app.config["TESTING"] = True
         self.client = backend.app.test_client()
 
     def tearDown(self):
+        backend.DEMO_MODE = self.previous_demo_mode
         self.temp_dir.cleanup()
 
     def demo_login(self, role="learner"):
         return self.client.post("/api/auth/demo", json={"role": role})
+
+    def test_database_initialization_does_not_seed_sample_accounts_by_default(self):
+        backend.DEMO_MODE = False
+        backend.DATABASE = Path(self.temp_dir.name) / "empty.sqlite3"
+        backend.initialize_database()
+        with backend.app.app_context():
+            user_count = backend.get_db().execute(
+                "SELECT COUNT(*) AS total FROM users"
+            ).fetchone()["total"]
+        self.assertEqual(user_count, 0)
+        self.assertEqual(self.demo_login().status_code, 404)
 
     def test_demo_role_switch_and_instructor_permissions(self):
         self.assertEqual(self.demo_login().status_code, 200)
@@ -40,6 +54,17 @@ class TalinturoApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.get_json()["user"]["role"], "learner")
+        onboarding = self.client.put(
+            "/api/profile",
+            json={
+                "name": "Taylor Learner",
+                "learner_type": "Parent or caregiver",
+                "learning_goal": "Connect with family",
+            },
+        )
+        self.assertEqual(onboarding.status_code, 200)
+        self.assertEqual(onboarding.get_json()["user"]["learner_type"], "Parent or caregiver")
+        self.assertEqual(onboarding.get_json()["user"]["learning_goal"], "Connect with family")
         duplicate = self.client.post(
             "/api/auth/signup",
             json={"name": "Taylor", "email": "TAYLOR@example.com", "password": "safe-password"},
@@ -56,6 +81,20 @@ class TalinturoApiTests(unittest.TestCase):
             json={"email": "taylor@example.com", "password": "incorrect"},
         )
         self.assertEqual(invalid_login.status_code, 401)
+
+    def test_password_values_match_postgres_bytea_columns(self):
+        with patch.object(backend, "USE_POSTGRES", True):
+            salt, password_hash = backend.stored_password_values("00ff", "abcd")
+        self.assertEqual(salt, b"\x00\xff")
+        self.assertEqual(password_hash, b"\xab\xcd")
+
+    def test_signup_rejects_values_outside_supported_limits(self):
+        response = self.client.post(
+            "/api/auth/signup",
+            json={"name": "Taylor", "email": "taylor@example.com", "password": "p" * 129},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("8 and 128", response.get_json()["error"])
 
     def test_google_sign_in_requires_server_credentials(self):
         with patch.object(backend, "GOOGLE_CLIENT_ID", ""), patch.object(
@@ -123,6 +162,16 @@ class TalinturoApiTests(unittest.TestCase):
         current_user = self.client.get("/api/auth/me")
         self.assertEqual(current_user.status_code, 200)
         self.assertEqual(current_user.get_json()["user"]["email"], userinfo["email"])
+        onboarding = self.client.put(
+            "/api/profile",
+            json={
+                "name": "Google Learner",
+                "learner_type": "Adult learner",
+                "learning_goal": "Everyday conversations",
+            },
+        )
+        self.assertEqual(onboarding.status_code, 200)
+        self.assertEqual(onboarding.get_json()["user"]["learning_goal"], "Everyday conversations")
 
     def test_google_login_requires_an_existing_talinturo_account(self):
         userinfo = {
@@ -208,33 +257,55 @@ class TalinturoApiTests(unittest.TestCase):
         self.assertEqual(linked["id"], existing["id"])
         self.assertEqual(user_count, 3)
 
-    def test_progress_requires_session_and_valid_score(self):
+    def test_progress_requires_session_and_published_activity(self):
         self.assertEqual(
             self.client.post("/api/progress/complete", json={"activity": "practice", "score": 90}).status_code,
             401,
         )
         self.demo_login()
-        invalid = self.client.post(
-            "/api/progress/complete",
-            json={"activity": "practice", "score": 120},
-        )
+        invalid = self.client.post("/api/progress/complete", json={"response": {"answers": []}})
         self.assertEqual(invalid.status_code, 400)
-        valid = self.client.post(
+        unavailable = self.client.post(
             "/api/progress/complete",
-            json={"activity": "practice", "score": 90},
+            json={"activity_id": 1, "response": {"answers": []}},
         )
-        self.assertEqual(valid.status_code, 201)
-        self.assertGreaterEqual(len(self.client.get("/api/progress").get_json()["events"]), 1)
+        self.assertEqual(unavailable.status_code, 503)
 
-    def test_learning_content_endpoints_return_demo_content(self):
+    def test_lesson_progress_requires_login_and_valid_in_progress_percentage(self):
+        response = self.client.put(
+            "/api/lessons/1/progress",
+            json={"progress_percent": 25},
+        )
+        self.assertEqual(response.status_code, 401)
+
         self.demo_login()
-        paths = self.client.get("/api/paths").get_json()["paths"]
-        vocabulary = self.client.get("/api/vocabulary").get_json()["words"]
-        scenarios = self.client.get("/api/scenarios").get_json()["scenarios"]
-        self.assertTrue(paths)
-        self.assertTrue(vocabulary)
-        self.assertTrue(scenarios)
-        self.assertIn("lessons", paths[0])
+        for invalid_progress in (None, True, 0, 100, 25.5, "25"):
+            with self.subTest(progress_percent=invalid_progress):
+                response = self.client.put(
+                    "/api/lessons/1/progress",
+                    json={"progress_percent": invalid_progress},
+                )
+                self.assertEqual(response.status_code, 400)
+
+        unavailable = self.client.put(
+            "/api/lessons/1/progress",
+            json={"progress_percent": 25},
+        )
+        self.assertEqual(unavailable.status_code, 503)
+
+    def test_learning_content_endpoints_require_postgres_instead_of_demo_content(self):
+        self.demo_login()
+        for endpoint in ("/api/paths", "/api/vocabulary", "/api/scenarios", "/api/challenges"):
+            response = self.client.get(endpoint)
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("PostgreSQL", response.get_json()["error"])
+            self.assertTrue(response.get_json()["missing_data"])
+
+    def test_data_readiness_reports_postgres_configuration(self):
+        self.demo_login()
+        response = self.client.get("/api/data/readiness")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["missing_data"][0]["table"], "DATABASE_URL")
 
     def test_instructor_can_add_a_learner_once(self):
         self.demo_login("instructor")
