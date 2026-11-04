@@ -6,10 +6,10 @@ Talinturo is a Filipino Sign Language (FSL) learning app for learners, families,
 
 ## What is included
 
-- **Learner experience:** Dashboard, learning paths, vocabulary search, camera practice preview, scenario activity and results, level challenge, and progress.
+- **Learner experience:** Dashboard, learning paths, vocabulary search, camera practice preview, scenario activity and results, level challenge, progress, and classroom joining by invite code.
 - **Instructor experience:** Dashboard, learner roster and details, virtual classrooms, classroom creation, and student management.
 - **Shared screens:** Landing, sign in and sign up, profile setup and editing, settings, password recovery information, help, and not-found handling.
-- **API:** Account creation and login, profile and preferences, PostgreSQL content and progress endpoints, and instructor classroom and roster endpoints.
+- **API:** Account creation and login, profile and preferences, PostgreSQL content and progress endpoints, learner classroom membership, and instructor classroom and roster endpoints.
 
 ## Technology
 
@@ -30,7 +30,7 @@ Flask API ─── PostgreSQL
          └── SQLite (optional local development/testing)
 ```
 
-In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Restore `backend/talinturo.sql`, apply `backend/talinturo_backend_migration.sql`, and configure `DATABASE_URL` to use PostgreSQL. The API does not silently substitute sample content when the database is empty. See [SETUP.md](SETUP.md) for setup and the records required to populate the app.
+In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Load `talinturo_database.sql` into a new PostgreSQL database and configure `DATABASE_URL` to use it. The API does not silently substitute sample content when the database is empty. See [SETUP.md](SETUP.md) for setup and the records required to populate the app.
 
 ## Project layout
 
@@ -38,10 +38,9 @@ In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`
 talinturo/
 ├── backend/
 │   ├── app.py
-│   ├── talinturo.sql
-│   ├── talinturo_backend_migration.sql
 │   ├── requirements.txt
 │   └── test_app.py
+├── talinturo_database.sql
 ├── src/
 │   ├── api.js
 │   ├── App.jsx

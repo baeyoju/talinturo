@@ -1,42 +1,41 @@
-# Environment variables
+# Environment configuration
 
-Talinturo reads backend configuration from environment variables when Flask starts. Set them in the same terminal that runs the API. Unless noted otherwise, variables are optional for local development.
+The backend loads the project-root `.env` file when it starts. The file is ignored by Git; keep credentials there, not in source code or `.env.example`. Copy the example for a fresh checkout:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+The backend process environment takes precedence over values in `.env`, so deployment platforms can inject their own secrets.
 
 ## Database
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | Unset | PostgreSQL connection URL. Learning content and progress endpoints require it. Restore `backend/talinturo.sql` into a new database, then apply `backend/talinturo_backend_migration.sql`. |
-| `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path for local authentication development and tests when `DATABASE_URL` is unset. |
+| `DATABASE_URL` | Unset | PostgreSQL connection URL. Learning content and progress endpoints require it. |
+| `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path when `DATABASE_URL` is unset. |
 | `PGHOST` | Driver default | PostgreSQL server host, when not specified in `DATABASE_URL`. |
 | `PGPORT` | Driver default | PostgreSQL server port, when not specified in `DATABASE_URL`. |
 | `PGDATABASE` | Driver default | PostgreSQL database name, when not specified in `DATABASE_URL`. |
 | `PGUSER` | Driver default | PostgreSQL username, when not specified in `DATABASE_URL`. |
-| `PGPASSWORD` | Unset | PostgreSQL password, when not specified in `DATABASE_URL`. Keep this secret and do not commit it. |
+| `PGPASSWORD` | Unset | Private PostgreSQL password, when not specified in `DATABASE_URL`. |
 
-Example PowerShell setup for a local PostgreSQL server:
-
-```powershell
-$env:PGUSER = "postgres"
-$env:PGPASSWORD = Read-Host "PostgreSQL password"
-$env:DATABASE_URL = "postgresql://127.0.0.1:5432/talinturo"
-```
-
-The password is entered at the prompt rather than included in the connection URL. If your server uses different connection details, update the URL or the corresponding `PG*` variables.
+Set `DATABASE_URL` to enable PostgreSQL. Keep its password out of the URL when possible and use `PGPASSWORD` in `.env`. The schema is in the project-root `talinturo_database.sql`; applying it does not migrate an older schema or populate learning content.
 
 ## Flask and authentication
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `TALINTURO_SECRET_KEY` | `local-development-key-change-before-deploy` | Signs Flask sessions and protects OAuth state. Set a strong, private value; the default is for local development only. |
-| `TALINTURO_DEMO_MODE` | `false` | Enables optional local demo accounts and role switching. It does not seed PostgreSQL learning content. |
-| `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when the backend is served over HTTPS. Leave `false` for local HTTP development. |
-| `FLASK_DEBUG` | `false` | Enables Flask debug mode when set to `true`. Use only for local development. |
+| `TALINTURO_SECRET_KEY` | Random per process if unset | Private Flask session signing key. Set a stable value in `.env` so sessions survive backend restarts. |
+| `TALINTURO_DEMO_MODE` | `false` | Enables optional local demo accounts and role switching. |
+| `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when the backend is served over HTTPS. |
+| `FLASK_DEBUG` | `false` | Enables Flask debug mode. Use only for local development. |
 
-Generate a session key in PowerShell:
+Generate a session key in PowerShell and paste the output into `TALINTURO_SECRET_KEY` in `.env`:
 
 ```powershell
-$env:TALINTURO_SECRET_KEY = (python -c "import secrets; print(secrets.token_urlsafe(32))")
+.\backend\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 ## Frontend and Google sign-in
@@ -44,31 +43,18 @@ $env:TALINTURO_SECRET_KEY = (python -c "import secrets; print(secrets.token_urls
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TALINTURO_FRONTEND_URL` | `http://127.0.0.1:5173` | Frontend URL used after Google sign-in. |
-| `GOOGLE_CLIENT_ID` | Unset | Google OAuth client ID. Google sign-in is unavailable unless both Google credentials are configured. |
-| `GOOGLE_CLIENT_SECRET` | Unset | Private Google OAuth client secret. Do not commit or share it. |
-| `GOOGLE_REDIRECT_URI` | `http://127.0.0.1:5173/api/auth/google/callback` | OAuth callback URL. It must match the redirect URI registered with Google. |
+| `GOOGLE_CLIENT_ID` | Unset | Google OAuth client ID. |
+| `GOOGLE_CLIENT_SECRET` | Unset | Private Google OAuth client secret. |
+| `GOOGLE_REDIRECT_URI` | `http://127.0.0.1:5173/api/auth/google/callback` | OAuth callback URL registered with Google. |
 
-Example Google OAuth configuration for local development:
-
-```powershell
-$env:GOOGLE_CLIENT_ID = "your-client-id"
-$env:GOOGLE_CLIENT_SECRET = Read-Host "Google client secret"
-$env:GOOGLE_REDIRECT_URI = "http://127.0.0.1:5173/api/auth/google/callback"
-$env:TALINTURO_FRONTEND_URL = "http://127.0.0.1:5173"
-$env:TALINTURO_SECRET_KEY = (python -c "import secrets; print(secrets.token_urlsafe(32))")
-```
-
-Register `http://127.0.0.1:5173` as the authorized JavaScript origin and the configured `GOOGLE_REDIRECT_URI` as the authorized redirect URI in Google Cloud Console. Restart Flask after changing these variables. Use the same hostname consistently: `localhost` and `127.0.0.1` are different OAuth origins. For deployment, use the deployed HTTPS frontend and callback URLs and route the callback path to Flask.
-
-The login screen uses the OAuth `login` flow and expects an existing Talinturo account. The landing page and sign-up screen use the `signup` flow, which creates a learner account when the verified Google email is new. A verified Google address matching an existing Talinturo email is linked to that account.
+Google sign-in is unavailable unless both OAuth credentials are set in `.env`. Register the frontend URL as the authorized JavaScript origin and the redirect URL as the authorized redirect URI. Use the same hostname consistently (`localhost` and `127.0.0.1` are different origins). Restart Flask after changing settings.
 
 ## Security notes
 
-- Never commit passwords, OAuth secrets, session keys, or a populated `.env` file.
-- Values set with `$env:NAME = "value"` apply only to the current PowerShell session and its child processes.
-- The backend does not automatically load a `.env` file. Configure environment variables in the process manager or terminal that starts Flask.
-- `DATABASE_URL` selects PostgreSQL; it does not migrate or copy data from the SQLite database. It also does not generate sample content.
-- The backend expects the schema in `backend/talinturo.sql` plus `backend/talinturo_backend_migration.sql`. Apply the migration before starting Flask; startup reports missing tables or columns.
-- Before public deployment, disable demo mode, set a private session key, use HTTPS and secure cookies, and configure production access controls.
+- Never commit `.env`, passwords, OAuth secrets, database credentials, or session keys.
+- `.env.example` contains configuration names and safe defaults only. Put real values in `.env`.
+- `DATABASE_URL` selects PostgreSQL; it does not migrate data from SQLite or generate sample content.
+- Before public deployment, disable demo mode, set a private stable session key, use HTTPS and secure cookies, and configure production access controls.
+- The Google OAuth client secret was previously embedded in source code. Treat it as exposed: rotate it in Google Cloud Console and place the replacement only in `.env`.
 
-For installation and run instructions, see [SETUP.md](SETUP.md).
+For installation and database setup, see [SETUP.md](SETUP.md).

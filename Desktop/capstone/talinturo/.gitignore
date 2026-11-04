@@ -20,6 +20,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
+backend/.env
+backend/.env.*
 
 # Operating system files
 .DS_Store

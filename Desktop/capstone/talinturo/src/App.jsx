@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { AnimatePresence, domAnimation, LazyMotion, m, useReducedMotion } from "framer-motion";
 import { api, getPendingApiRequests, subscribeToApiLoading } from "./api.js";
 import ConnieLoader from "./ConnieLoader.jsx";
 
@@ -11,6 +12,7 @@ const learnerNav = [
   { label: "Sign practice", to: "/practice", icon: "hand" },
   { label: "Scenarios", to: "/scenarios", icon: "message" },
   { heading: "YOUR JOURNEY" },
+  { label: "Classrooms", to: "/classrooms", icon: "school" },
   { label: "My progress", to: "/progress", icon: "star" },
   { label: "Level challenge", to: "/challenge", icon: "sparkles" },
 ];
@@ -23,6 +25,12 @@ const instructorNav = [
   { heading: "YOUR ACCOUNT" },
   { label: "My progress", to: "/progress", icon: "star" },
 ];
+
+const PageMotionContext = createContext(false);
+const introTextVariants = (reduceMotion) => ({
+  hidden: reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 },
+  visible: { opacity: 1, y: 0, transition: { duration: reduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] } },
+});
 
 const iconArtwork = {
   book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" /><path d="M4 5.5v16M8 7h8M8 11h8" /></>,
@@ -72,6 +80,7 @@ function Toast({ message, onClose }) {
 }
 
 function App() {
+  const prefersReducedMotion = useReducedMotion();
   const [role, setRole] = useState(localStorage.getItem("talinturo-role") || "learner");
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem("talinturo-settings");
@@ -209,7 +218,7 @@ function App() {
     previousPathnameRef.current = location.pathname;
     if (!pathnameChanged || !sidebarOpen) return undefined;
 
-    const timeoutId = window.setTimeout(() => setSidebarOpen(false), 3000);
+    const timeoutId = window.setTimeout(() => setSidebarOpen(false), 1000);
     return () => window.clearTimeout(timeoutId);
   }, [location.pathname, sidebarOpen]);
 
@@ -289,14 +298,15 @@ function App() {
     "--muted-shadow": "none",
   };
   const onboardingInProgress = location.pathname === "/profile/setup";
+  const shouldReduceMotion = prefersReducedMotion || settings.reducedMotion;
 
   if (authLoading) {
-    return <div className="app-shell public-shell" style={appStyle}><div className="public-loading">Getting your learning space ready…</div><ConnieLoader active={pendingApiRequests > 0} /></div>;
+    return <div className="app-shell public-shell" data-reduced-motion={shouldReduceMotion} style={appStyle}><div className="public-loading">Getting your learning space ready…</div><ConnieLoader active={pendingApiRequests > 0} /></div>;
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="app-shell public-shell" style={appStyle}>
+      <div className="app-shell public-shell" data-reduced-motion={shouldReduceMotion} style={appStyle}>
         <Routes>
           <Route path="/" element={<LandingPage onNavigate={navigate} onAuth={acceptAuth} onToast={setToast} />} />
           <Route path="/welcome" element={<LandingPage onNavigate={navigate} onAuth={acceptAuth} onToast={setToast} />} />
@@ -313,7 +323,7 @@ function App() {
   }
 
   return (
-    <div ref={workspaceRef} className={`app-shell workspace-shell ${sidebarOpen && !onboardingInProgress ? "navigation-open" : ""}`} data-theme={settings.themeMode} style={appStyle}>
+    <div ref={workspaceRef} className={`app-shell workspace-shell ${sidebarOpen && !onboardingInProgress ? "navigation-open" : ""}`} data-theme={settings.themeMode} data-reduced-motion={shouldReduceMotion} style={appStyle}>
       {!onboardingInProgress && <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-profile">
           <div className="avatar avatar-mint">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div>
@@ -371,11 +381,21 @@ function App() {
             </div>
           </div>
         </header>
-        <main className="content">
-          <Routes>
+        <LazyMotion features={domAnimation}>
+          <PageMotionContext.Provider value={shouldReduceMotion}>
+          <AnimatePresence mode="wait">
+            <m.main
+              key={location.pathname}
+              className="content"
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
+            >
+            <Routes>
             <Route path="/" element={<Dashboard user={user} onNavigate={navigate} />} />
             <Route path="/paths" element={<LearningPaths onNavigate={navigate} />} />
-            <Route path="/paths/:pathId" element={<LearningPathDetails onNavigate={navigate} />} />
+            <Route path="/paths/:pathId" element={<LearningPathDetails onNavigate={navigate} reducedMotion={settings.reducedMotion} />} />
             <Route path="/vocabulary" element={<Vocabulary />} />
             <Route path="/practice" element={<Practice onToast={setToast} />} />
             <Route path="/scenarios" element={<Scenarios onNavigate={navigate} />} />
@@ -389,9 +409,9 @@ function App() {
             <Route path="/instructor" element={<InstructorDashboard user={user} onNavigate={navigate} />} />
             <Route path="/learners" element={<LearnerManagement onNavigate={navigate} />} />
             <Route path="/learners/:id" element={<LearnerDetails />} />
-            <Route path="/classrooms" element={<Classrooms onNavigate={navigate} />} />
-            <Route path="/classrooms/create" element={<CreateClassroom onNavigate={navigate} onToast={setToast} />} />
-            <Route path="/classrooms/:id/students" element={<AddStudents onNavigate={navigate} onToast={setToast} />} />
+            <Route path="/classrooms" element={role === "instructor" ? <Classrooms onNavigate={navigate} /> : <LearnerClassrooms onToast={setToast} />} />
+            <Route path="/classrooms/create" element={role === "instructor" ? <CreateClassroom onNavigate={navigate} onToast={setToast} /> : <Navigate to="/classrooms" replace />} />
+            <Route path="/classrooms/:id/students" element={role === "instructor" ? <AddStudents onNavigate={navigate} onToast={setToast} demoMode={demoMode} /> : <Navigate to="/classrooms" replace />} />
             <Route path="/profile" element={<Profile user={user} onSave={async (name) => {
               try {
                 const profile = await api("/profile", { method: "PUT", body: JSON.stringify(name) });
@@ -419,8 +439,11 @@ function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/welcome" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound onNavigate={navigate} />} />
-          </Routes>
-        </main>
+            </Routes>
+            </m.main>
+          </AnimatePresence>
+          </PageMotionContext.Provider>
+        </LazyMotion>
         <footer className="footer"><span>Made with <b><Icon name="heart" size={13} /></b> for a more inclusive world</span><span>© 2026 Talinturo <i>·</i> <Link to="/help">About</Link> <i>·</i> <Link to="/help">Privacy</Link></span></footer>
       </div>
       <Toast message={toast} onClose={() => setToast("")} />
@@ -430,6 +453,7 @@ function App() {
 }
 
 function pageTitle(path) {
+  if (path.startsWith("/paths/")) return "Learning path";
   if (path.startsWith("/learners/")) return "Learner details";
   if (path.startsWith("/classrooms/create")) return "Create classroom";
   if (/^\/classrooms\/\d+\/students$/.test(path)) return "Add students";
@@ -440,7 +464,20 @@ function pageTitle(path) {
 }
 
 function PageTitle({ eyebrow, title, description, action }) {
-  return <div className="page-title"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h1>{title}</h1>{description && <p className="page-description">{description}</p>}</div>{action && <div>{action}</div>}</div>;
+  const reduceMotion = useContext(PageMotionContext);
+  const textVariants = introTextVariants(reduceMotion);
+  const variants = {
+    hidden: {},
+    visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.075, delayChildren: reduceMotion ? 0 : 0.04 } },
+  };
+  return <m.div className="page-title" variants={variants} initial={reduceMotion ? false : "hidden"} animate="visible">
+    <div>
+      {eyebrow && <m.p className="eyebrow" variants={textVariants}>{eyebrow}</m.p>}
+      <m.h1 variants={textVariants}>{title}</m.h1>
+      {description && <m.p className="page-description" variants={textVariants}>{description}</m.p>}
+    </div>
+    {action && <m.div variants={textVariants}>{action}</m.div>}
+  </m.div>;
 }
 
 function Button({ children, variant = "primary", className = "", ...props }) {
@@ -670,6 +707,8 @@ function LandingPage({ onNavigate, onAuth, onToast }) {
 }
 
 function Dashboard({ user, onNavigate }) {
+  const reduceMotion = useContext(PageMotionContext);
+  const textVariants = introTextVariants(reduceMotion);
   const [summary, setSummary] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -688,15 +727,20 @@ function Dashboard({ user, onNavigate }) {
   return (
     <div className="learner-dashboard">
       <section className="learner-hero">
-        <div className="learner-hero-copy">
-          <span className="dashboard-kicker">YOUR LEARNING SPACE</span>
-          <h1>Hi, {firstName}!<br />Ready for a little progress?</h1>
-          <p>Every sign is a new way to connect. Pick up where you left off, or explore something new.</p>
+        <m.div
+          className="learner-hero-copy"
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.085, delayChildren: reduceMotion ? 0 : 0.04 } } }}
+          initial={reduceMotion ? false : "hidden"}
+          animate="visible"
+        >
+          <m.span className="dashboard-kicker" variants={textVariants}>YOUR LEARNING SPACE</m.span>
+          <m.h1 variants={textVariants}>Hi, {firstName}!<br />Ready for a little progress?</m.h1>
+          <m.p variants={textVariants}>Every sign is a new way to connect. Pick up where you left off, or explore something new.</m.p>
           <div className="learner-hero-actions">
             <Button className="dashboard-button-yellow" onClick={() => onNavigate(summary?.next_lesson ? `/paths/${summary.next_lesson.path_id}` : "/paths")}>Continue learning <span>→</span></Button>
             <button className="dashboard-text-button" onClick={() => onNavigate("/paths")}>Browse learning paths</button>
           </div>
-        </div>
+        </m.div>
         <div className="learner-hero-art" aria-hidden="true">
           <div className="learner-art-orbit"><Icon name="hand" size={76} /></div>
           <span className="learner-art-spark learner-art-spark-one">✦</span>
@@ -787,7 +831,7 @@ function LearningPaths({ onNavigate }) {
   return <>
     <PageTitle eyebrow="LEARN AT YOUR OWN PACE" title="Learning paths" description="A little practice each day goes a long way. Find the path that feels right for you." action={<Button onClick={() => onNavigate("/practice")}><Icon name="hand" size={17} /> Quick practice</Button>} />
     <div className="filter-row">{["All paths", "In progress", "Not started", "Completed"].map((item) => <button key={item} className={`filter-chip ${filter === item ? "filter-active" : ""}`} onClick={() => setFilter(item)}>{item}</button>)}</div>
-    {loadError && <p className="inline-error">Could not load learning paths: {loadError}</p>}
+    {loadError && <DatabaseHelpNotice error={loadError} />}
     {loading ? <div className="empty-state">Loading your learning paths…</div> : visiblePaths.length ? <div className="learning-path-grid">{visiblePaths.map((path, index) => {
       const color = ["peach", "lavender", "yellow"][index % 3];
       return <article className="path-card" key={path.id}><div className={`path-card-art ${color}`}><span className="path-emoji"><Icon name="bookOpen" size={42} /></span><span className="path-level">{path.level}</span><span className="path-sparkle">✦</span></div><div className="path-card-content"><span className="eyebrow">LEARNING PATH</span><h2>{path.title}</h2>{path.description && <p>{path.description}</p>}<div className="path-card-meta"><span>▤ {path.lessons} bite-sized lessons</span></div><div className="path-card-progress"><ProgressBar value={path.progress} /><span>{path.progress}% complete</span></div><Button variant={path.progress ? "primary" : "outline"} onClick={() => onNavigate(`/paths/${path.id}`)}>View lessons <span>→</span></Button></div></article>;
@@ -796,8 +840,44 @@ function LearningPaths({ onNavigate }) {
   </>;
 }
 
-function LearningPathDetails({ onNavigate }) {
+function DatabaseHelpNotice({ error }) {
+  return <section className="database-help-notice panel" role="alert">
+    <span className="database-help-icon"><Icon name="lifeBuoy" size={23} /></span>
+    <div>
+      <p className="eyebrow">CAN'T REACH THE LEARNING WORLD?</p>
+      <h2>Check your database connection</h2>
+      <p>{error}</p>
+      <p>Open <strong>SETUP.md → Connect PostgreSQL</strong>. Set <code>DATABASE_URL</code> (and <code>PGHOST</code>, <code>PGPORT</code>, <code>PGDATABASE</code>, <code>PGUSER</code>, and <code>PGPASSWORD</code> if needed) in the same PowerShell window that runs Flask, then restart the backend.</p>
+      <p>If Flask reports missing lesson columns, apply the updated <code>talinturo_database.sql</code> to your database.</p>
+    </div>
+  </section>;
+}
+
+function LessonMedia({ lesson }) {
+  const [imageUnavailable, setImageUnavailable] = useState(false);
+  const [videoUnavailable, setVideoUnavailable] = useState(false);
+  const imageUrl = typeof lesson.image_url === "string" ? lesson.image_url.trim() : "";
+  const videoUrl = typeof lesson.video_url === "string" ? lesson.video_url.trim() : "";
+
+  return <div className="lesson-media">
+    {imageUrl && !imageUnavailable
+      ? <img className="lesson-media-image" src={imageUrl} alt={`${lesson.title} lesson`} loading="lazy" onError={() => setImageUnavailable(true)} />
+      : <div className="lesson-media-placeholder"><Icon name="bookOpen" size={32} /><span>{imageUrl ? "Lesson image unavailable" : "Add an image_url for this lesson"}</span></div>}
+    {videoUrl && <details className="lesson-demo">
+      <summary><Icon name="camera" size={17} /> Watch the sign demonstration</summary>
+      {videoUnavailable
+        ? <p className="lesson-video-error">This video could not be played here. <a href={videoUrl} target="_blank" rel="noreferrer">Open the video in a new tab</a>.</p>
+        : <video controls playsInline preload="metadata" poster={imageUrl || undefined} onError={() => setVideoUnavailable(true)}>
+          <source src={videoUrl} />
+          Your browser does not support embedded video. <a href={videoUrl} target="_blank" rel="noreferrer">Open the video</a>.
+        </video>}
+    </details>}
+  </div>;
+}
+
+function LearningPathDetails({ onNavigate, reducedMotion }) {
   const { pathId } = useParams();
+  const prefersReducedMotion = useReducedMotion() || reducedMotion;
   const [path, setPath] = useState(null);
   const [lessons, setLessons] = useState([]);
   const [loadError, setLoadError] = useState("");
@@ -832,30 +912,99 @@ function LearningPathDetails({ onNavigate }) {
       setSavingLessonId(null);
     }
   };
-  if (loadError) return <><PageTitle eyebrow="LEARNING PATH" title="Path unavailable" /><p className="inline-error">{loadError}</p><Button variant="outline" onClick={() => onNavigate("/paths")}>← All learning paths</Button></>;
+  if (loadError) return <><PageTitle eyebrow="LEARNING PATH" title="Path unavailable" /><DatabaseHelpNotice error={loadError} /><Button variant="outline" onClick={() => onNavigate("/paths")}>← All learning paths</Button></>;
   if (loading || !path) return <div className="empty-state">Loading learning path…</div>;
+  const completedLessons = lessons.filter((lesson) => lesson.progress >= 100).length;
+  const overallProgress = lessons.length ? Math.round(completedLessons * 100 / lessons.length) : 0;
+  const currentLesson = lessons.find((lesson, index) =>
+    lesson.progress < 100 && lessons.slice(0, index).every((previous) => previous.progress >= 100),
+  );
   return <>
     <PageTitle eyebrow={path.level} title={path.title} description={path.description} action={<Button variant="outline" onClick={() => onNavigate("/paths")}>← All paths</Button>} />
     {saveError && <p className="inline-error">{saveError}</p>}
-    {lessons.length ? <div className="learning-path-grid">{lessons.map((lesson, index) => {
-      const sections = Array.isArray(lesson.content?.sections) ? lesson.content.sections : [];
-      const hasSections = sections.length > 0;
-      return <article className="path-card" key={lesson.id}>
-        <div className={`path-card-art ${["peach", "lavender", "yellow"][index % 3]}`}>
-          <span className="path-emoji"><Icon name="bookOpen" size={42} /></span>
-          <span className="path-level">{lesson.duration_minutes ? `${lesson.duration_minutes} min` : "Lesson"}</span>
-        </div>
-        <div className="path-card-content">
-          <h2>{lesson.title}</h2>
-          {lesson.content?.description && <p>{lesson.content.description}</p>}
-          <div className="path-card-progress"><ProgressBar value={lesson.progress} /><span>{lesson.progress}% complete</span></div>
-          {hasSections ? sections.map((section, sectionIndex) => <div className="insight-row" key={section.id || sectionIndex}><div><strong>{section.title}</strong><small>{section.body}</small></div></div>) : <p>Lesson material is not available yet. Add a lesson <code>content</code> JSON object to the PostgreSQL <code>lessons</code> table.</p>}
-          <Button variant={lesson.progress >= 100 ? "outline" : "primary"} disabled={lesson.progress >= 100 || savingLessonId === lesson.id || !hasSections} onClick={() => completeLesson(lesson.id)}>
-            {lesson.progress >= 100 ? "Lesson completed" : savingLessonId === lesson.id ? "Saving…" : hasSections ? "Mark lesson complete" : "Lesson content needed"}
-          </Button>
-        </div>
-      </article>;
-    })}</div> : <div className="empty-state"><Icon name="bookOpen" size={34} /><h2>No lessons in this path yet</h2><p>Add published lessons linked to this learning path in PostgreSQL <code>lessons</code>.</p></div>}
+    <section className="path-map-summary panel">
+      <div className="path-map-summary-top"><span className="path-map-section">YOUR LEARNING JOURNEY</span><span className="path-map-level">{path.level || "FSL PATH"}</span></div>
+      <div className="path-map-summary-main"><div><h2>{currentLesson ? "Keep your momentum!" : "Journey complete!"}</h2><p>{currentLesson ? `Next up: ${currentLesson.title}` : "You completed every lesson in this path."}</p></div><strong>{overallProgress}%</strong></div>
+      <ProgressBar value={overallProgress} />
+      <div className="path-map-summary-bottom"><span><Icon name="star" size={16} /> {completedLessons} of {lessons.length} lessons complete</span><span>{lessons.length} lesson{lessons.length === 1 ? "" : "s"}</span></div>
+    </section>
+    {lessons.length ? <m.div
+      className="lesson-journey"
+      aria-label="Lessons in this learning path"
+      initial="hidden"
+      animate="visible"
+      variants={{ hidden: {}, visible: { transition: { staggerChildren: prefersReducedMotion ? 0 : 0.08 } } }}
+    >
+      {lessons.map((lesson, index) => {
+        const sections = Array.isArray(lesson.content?.sections) ? lesson.content.sections : [];
+        const hasSections = sections.length > 0;
+        const completed = lesson.progress >= 100;
+        const current = !completed && lessons.slice(0, index).every((previous) => previous.progress >= 100);
+        const locked = !completed && !current;
+        const status = completed ? "completed" : current ? "current" : "locked";
+        const nodeAnimation = current
+          ? {
+            scale: [1, 1.08, 1],
+            boxShadow: [
+              "0 0 0 0 rgba(248, 201, 47, .28)",
+              "0 0 0 12px rgba(248, 201, 47, 0)",
+              "0 0 0 0 rgba(248, 201, 47, .28)",
+            ],
+          }
+          : completed
+            ? {
+              boxShadow: [
+                "0 0 16px rgba(248, 201, 47, .44)",
+                "0 0 26px rgba(248, 201, 47, .78)",
+                "0 0 16px rgba(248, 201, 47, .44)",
+              ],
+            }
+            : undefined;
+        return <m.article
+          className={`lesson-stop lesson-stop-${index % 2 ? "right" : "left"} lesson-stop-${status}`}
+          key={lesson.id}
+          aria-label={`Lesson ${index + 1}: ${lesson.title}, ${status}`}
+          variants={{
+            hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 18 },
+            visible: { opacity: 1, y: 0 },
+          }}
+          transition={{ duration: prefersReducedMotion ? 0 : 0.32, ease: "easeOut" }}
+        >
+          <div className="lesson-node-column">
+            <m.div
+              className="lesson-node"
+              animate={prefersReducedMotion ? undefined : nodeAnimation}
+              transition={{ duration: current ? 1.8 : 2.6, repeat: Infinity, ease: "easeInOut" }}
+              aria-hidden="true"
+            >
+              <Icon name={completed ? "star" : locked ? "lock" : "bookOpen"} size={27} />
+            </m.div>
+            <span className="lesson-node-number">{String(index + 1).padStart(2, "0")}</span>
+          </div>
+          <div className="lesson-stop-card">
+            <div className="lesson-stop-heading">
+              <span className={`lesson-status-label lesson-status-${status}`}>
+                {completed ? "Completed" : current ? "Current lesson" : "Locked"}
+              </span>
+              <span className="lesson-duration">{lesson.duration_minutes ? `${lesson.duration_minutes} min` : "Lesson"}</span>
+            </div>
+            <h2>{lesson.title}</h2>
+            {lesson.content?.description && <p>{lesson.content.description}</p>}
+            <LessonMedia lesson={lesson} />
+            <div className="path-card-progress"><ProgressBar value={lesson.progress} /><span>{lesson.progress}% complete</span></div>
+            {locked && <p className="lesson-lock-note"><Icon name="lock" size={15} /> Complete the previous lesson to unlock this one.</p>}
+            {hasSections ? sections.map((section, sectionIndex) => <div className="insight-row" key={section.id || sectionIndex}><div><strong>{section.title}</strong><small>{section.body}</small></div></div>) : <p>Lesson material is not available yet. Add a lesson <code>content</code> JSON object to the PostgreSQL <code>lessons</code> table.</p>}
+            <Button
+              variant={completed || locked ? "outline" : "primary"}
+              disabled={completed || locked || savingLessonId === lesson.id || !hasSections}
+              onClick={() => completeLesson(lesson.id)}
+            >
+              {completed ? "Lesson completed" : locked ? "Locked" : savingLessonId === lesson.id ? "Saving…" : hasSections ? "Mark lesson complete" : "Lesson content needed"}
+            </Button>
+          </div>
+        </m.article>;
+      })}
+    </m.div> : <div className="empty-state"><Icon name="bookOpen" size={34} /><h2>No lessons in this path yet</h2><p>Add published lessons linked to this learning path in PostgreSQL <code>lessons</code>.</p></div>}
   </>;
 }
 
@@ -1254,11 +1403,63 @@ function Classrooms({ onNavigate }) {
       ))}
     </div>
     {classrooms.length === 0 && !loadError && <div className="empty-state"><Icon name="home" size={34} /><h2>No classrooms yet</h2><p>Create a classroom to invite learners into your space.</p></div>}
-    <section className="invite-panel"><div><Icon name="mail" size={24} /><h2>Invite learners into your classroom</h2><p>Share your classroom code with families. Learners can join when they're ready.</p></div><Button variant="outline" onClick={() => onNavigate("/classrooms/create")}>Create a classroom</Button></section>
+    <section className="invite-panel"><div><Icon name="mail" size={24} /><h2>Invite learners into your classroom</h2><p>Share your classroom code with learners who already have a Talinturo account so they can join.</p></div><Button variant="outline" onClick={() => onNavigate("/classrooms/create")}>Create a classroom</Button></section>
   </>;
 }
 
-function AddStudents({ onNavigate, onToast }) {
+function LearnerClassrooms({ onToast }) {
+  const [classrooms, setClassrooms] = useState([]);
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    api("/classrooms")
+      .then((result) => setClassrooms(result.classrooms))
+      .catch((error) => setLoadError(error.message));
+  }, []);
+
+  const joinClassroom = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const result = await api("/classrooms/join", {
+        method: "POST",
+        body: JSON.stringify({ code: code.trim() }),
+      });
+      setClassrooms((current) => [...current, result.classroom]);
+      setCode("");
+      onToast(`You joined ${result.classroom.name}!`);
+    } catch (error) {
+      onToast(`Couldn't join classroom: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <>
+    <PageTitle eyebrow="LEARNING IS BETTER TOGETHER" title="My classrooms" description="Join a learning community with a classroom code from your instructor." />
+    {loadError && <p className="inline-error">Could not load classrooms: {loadError}</p>}
+    <div className="students-layout">
+      <form className="form-panel panel" onSubmit={joinClassroom}>
+        <p className="eyebrow">JOIN YOUR COMMUNITY</p>
+        <h2>Enter a classroom code</h2>
+        <p className="form-description">Ask your instructor for their code, then join with your Talinturo account.</p>
+        <label>Classroom code<input required maxLength={100} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. SUNNY24" /></label>
+        <div className="form-actions"><Button type="submit" disabled={loading}>{loading ? "Joining…" : "Join classroom"} <span>→</span></Button></div>
+      </form>
+      <section className="panel roster-panel">
+        <div className="panel-heading"><div><p className="eyebrow">YOUR LEARNING CREW</p><h2>{classrooms.length} classroom{classrooms.length === 1 ? "" : "s"}</h2></div><span className="soft-tag">ACTIVE</span></div>
+        {classrooms.length ? classrooms.map((classroom) => <article className="roster-row" key={classroom.id}>
+          <span className="classroom-icon mint"><Icon name="school" size={22} /></span>
+          <span><strong>{classroom.name}</strong><small>{classroom.description || "A place to learn together"}</small></span>
+        </article>) : <div className="empty-state"><Icon name="sprout" size={34} /><h2>Find your learning crew</h2><p>When you join a classroom, it will show up here.</p></div>}
+      </section>
+    </div>
+  </>;
+}
+
+function AddStudents({ onNavigate, onToast, demoMode }) {
   const { id } = useParams();
   const [classroom, setClassroom] = useState(null);
   const [students, setStudents] = useState([]);
@@ -1287,7 +1488,7 @@ function AddStudents({ onNavigate, onToast }) {
       setLoading(false);
     }
   };
-  return <><PageTitle eyebrow="GROW YOUR LEARNING COMMUNITY" title="Add students" description="Invite a learner to this classroom. Their contact details stay within your local demo." action={<Button variant="outline" onClick={() => onNavigate("/classrooms")}>← Classrooms</Button>} /><section className="classroom-detail-banner panel"><Icon name="home" size={27} /><div><small>CLASSROOM</small><h2>{classroom?.name || "Your classroom"}</h2><p>Class code <strong>{classroom?.code || "…"}</strong></p></div></section><div className="students-layout"><form className="form-panel panel" onSubmit={submit}><p className="eyebrow">PERSONAL INVITE</p><h2>Add a learner</h2><p className="form-description">Add a name and email address to your classroom roster.</p><label>Learner name<input required maxLength={70} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Sam Rivera" /></label><label>Family or learner email<input required type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><div className="form-actions"><Button type="submit" disabled={loading}>{loading ? "Adding…" : "Add to classroom"} <span>→</span></Button></div></form><section className="panel roster-panel"><div className="panel-heading"><div><p className="eyebrow">LEARNING TOGETHER</p><h2>{students.length} learner{students.length === 1 ? "" : "s"}</h2></div><span className="soft-tag">PRIVATE ROSTER</span></div>{loadError && <p className="inline-error">Could not load roster: {loadError}</p>}{students.length ? students.map((student) => <div className="roster-row" key={student.id}><span className="avatar avatar-mint">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span><strong>{student.name}</strong><small>{student.email}</small></span><span className="room-status">INVITED</span></div>) : <div className="empty-state"><Icon name="sprout" size={34} /><h2>A new beginning</h2><p>Your learners will appear here once added.</p></div>}</section></div></>;
+  return <><PageTitle eyebrow="GROW YOUR LEARNING COMMUNITY" title="Add students" description={demoMode ? "Add a learner to this local demo classroom." : "Add a learner who already has a Talinturo account using their registered email."} action={<Button variant="outline" onClick={() => onNavigate("/classrooms")}>← Classrooms</Button>} /><section className="classroom-detail-banner panel"><Icon name="home" size={27} /><div><small>CLASSROOM</small><h2>{classroom?.name || "Your classroom"}</h2><p>Class code <strong>{classroom?.code || "…"}</strong></p></div></section><div className="students-layout"><form className="form-panel panel" onSubmit={submit}><p className="eyebrow">{demoMode ? "LOCAL DEMO ROSTER" : "REGISTERED LEARNER"}</p><h2>Add a learner</h2><p className="form-description">{demoMode ? "Add a name and email address to this local demo roster." : "Enter the email address on their Talinturo account. Or share the classroom code so they can join themselves."}</p>{demoMode && <label>Learner name<input required maxLength={70} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Sam Rivera" /></label>}<label>{demoMode ? "Family or learner email" : "Learner email"}<input required type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><div className="form-actions"><Button type="submit" disabled={loading}>{loading ? "Adding…" : "Add to classroom"} <span>→</span></Button></div></form><section className="panel roster-panel"><div className="panel-heading"><div><p className="eyebrow">LEARNING TOGETHER</p><h2>{students.length} learner{students.length === 1 ? "" : "s"}</h2></div><span className="soft-tag">PRIVATE ROSTER</span></div>{loadError && <p className="inline-error">Could not load roster: {loadError}</p>}{students.length ? students.map((student) => <div className="roster-row" key={student.id}><span className="avatar avatar-mint">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span><strong>{student.name}</strong><small>{student.email}</small></span><span className="room-status">ACTIVE</span></div>) : <div className="empty-state"><Icon name="sprout" size={34} /><h2>A new beginning</h2><p>Your learners will appear here once added.</p></div>}</section></div></>;
 }
 
 function CreateClassroom({ onNavigate, onToast }) {

@@ -11,6 +11,17 @@ This guide covers installing, running, and testing Talinturo on a development ma
 
 Run these commands from the project root.
 
+### Configure private settings
+
+The backend loads local configuration from the project-root `.env` file. It is ignored by Git and already included in this checkout. For a fresh checkout, create it from the safe template:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+Keep database passwords, OAuth secrets, and the Flask session key in `.env`, never in committed code or `.env.example`. Generate a session key with the command shown in `.env`. Restart Flask after editing the file.
+
 ### Start the Flask API
 
 In the first terminal:
@@ -46,48 +57,46 @@ Open the URL Vite prints, normally `http://127.0.0.1:5173`. Vite forwards reques
 
 ### Connect PostgreSQL
 
-The backend uses PostgreSQL whenever `DATABASE_URL` is set. `backend/talinturo.sql` is a PostgreSQL dump containing the base tables, and `backend/talinturo_backend_migration.sql` adds the tables and columns required by the current API. The dump contains no account or learning-content rows.
+The backend uses PostgreSQL whenever `DATABASE_URL` is set. The current schema is in the project-root `talinturo_database.sql`; it creates the tables and columns required by the API but contains no account or learning-content rows.
 
 #### If the database is empty
 
 ```powershell
-$env:PGUSER = "postgres"
-$env:PGPASSWORD = Read-Host "PostgreSQL password"
-createdb -U $env:PGUSER talinturo
-psql -U $env:PGUSER -d talinturo -v ON_ERROR_STOP=1 -f .\backend\talinturo.sql
-psql -U $env:PGUSER -d talinturo -v ON_ERROR_STOP=1 -f .\backend\talinturo_backend_migration.sql
+createdb -U postgres -W talinturo
+psql -U postgres -W -d talinturo -v ON_ERROR_STOP=1 -f .\talinturo_database.sql
 ```
 
-Run `createdb` and restore only when creating a brand-new empty database. The dump sets ownership to the PostgreSQL role `postgres`, so restore as that role (or adjust ownership in the dump for your database administrator). If you already loaded `talinturo.sql` into the database, do not restore it again; apply only the migration:
+Use a new empty database for this schema. The script's `CREATE TABLE IF NOT EXISTS` statements do not migrate an older schema; back up existing data and plan an explicit migration before using it with an existing Talinturo database.
+
+Then edit `.env` in the project root. `DATABASE_URL` selects PostgreSQL; `PG*` values provide connection details and credentials:
+
+```dotenv
+DATABASE_URL=postgresql://127.0.0.1:5432/talinturo
+PGHOST=127.0.0.1
+PGPORT=5432
+PGDATABASE=talinturo
+PGUSER=postgres
+PGPASSWORD=your-local-database-password
+TALINTURO_SECRET_KEY=your-generated-private-session-key
+TALINTURO_DEMO_MODE=false
+```
+
+Replace the sample password and session key with private values. Start Flask from the project root so it loads `.env`:
 
 ```powershell
-psql -U postgres -d talinturo -v ON_ERROR_STOP=1 -f .\backend\talinturo_backend_migration.sql
-```
-
-The migration is additive and safe to rerun. It creates OAuth, preferences, and saved-vocabulary tables; adds JSONB lesson content and publication/sort fields for achievements; and permits the `challenge` activity type. It also adds case-insensitive email uniqueness. Before applying it to an existing database with users, check for duplicate email addresses; duplicates must be resolved first:
-
-```sql
-SELECT lower(email) AS normalized_email, count(*)
-FROM users
-GROUP BY lower(email)
-HAVING count(*) > 1;
-```
-
-Then configure the backend to use this database, in the same PowerShell window where Flask will run:
-
-```powershell
-$env:PGHOST = "127.0.0.1"
-$env:PGPORT = "5432"
-$env:PGDATABASE = "talinturo"
-$env:PGUSER = "postgres"
-$env:PGPASSWORD = Read-Host "PostgreSQL password"
-$env:DATABASE_URL = "postgresql://127.0.0.1:5432/talinturo"
-$env:TALINTURO_SECRET_KEY = (.\backend\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))")
-$env:TALINTURO_DEMO_MODE = "false"
 .\backend\.venv\Scripts\python.exe backend\app.py
 ```
 
-If PostgreSQL is remote or uses a different username, host, or port, change those values. Keep the database password and session key private. The API validates its required tables and columns at startup; `/api/health` checks the active database connection. Account signup/login, Google OAuth, profile, preferences, learning content, and progress all use the database selected by `DATABASE_URL`. SQLite accounts are not automatically copied into PostgreSQL.
+If PostgreSQL is remote or uses a different username, host, or port, change those values. The API validates its required tables and columns at startup; `/api/health` checks the active database connection. Account signup/login, Google OAuth, profile, preferences, learning content, and progress all use the database selected by `DATABASE_URL`. SQLite accounts are not automatically copied into PostgreSQL.
+
+If you already have the current schema in an existing database, make sure the lesson media columns are present:
+
+```sql
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_url TEXT;
+```
+
+Set `DATABASE_URL` and any required `PG*` variables in `.env`, then restart Flask. If the frontend says it cannot reach the learning database, first check that Flask started successfully and that these settings point to a running PostgreSQL server and the intended database.
 
 In another PowerShell window from the project root, start the frontend with `npm run dev`. Open `http://127.0.0.1:5173`; Vite proxies `/api` requests to Flask. Both servers must remain running.
 
@@ -95,18 +104,18 @@ In another PowerShell window from the project root, start the frontend with `npm
 
 The app intentionally does not generate FSL lessons, signs, questions, badges, learners, or progress. Add and publish records in PostgreSQL:
 
-- `learning_paths`: `slug`, `title`, `description`, `level`, `sort_order`, `is_published`.
-- `lessons`: `path_id`, `slug`, `title`, `duration_minutes`, `sort_order`, `is_published`, and `content` (JSONB, added by the migration). Lesson `content` should include a `description` and a `sections` array of `{ "title": "...", "body": "..." }`.
-- `vocabulary_signs`: `slug`, `word`, `meaning`, `category`, optional `hint` and `media_url`, and `is_published`.
-- `activities`: unique `slug`, `activity_type` (`practice`, `scenario`, or `challenge`), `title`, `content` (JSONB), `sort_order`, and `is_published`. The migration expands the dump's activity type constraint to allow `challenge`.
+- `learning_paths`: `slug`, `title`, `description`, `level`, and `is_published`. Paths are ordered by `path_id`.
+- `lessons`: `path_id`, `slug`, `title`, `duration_minutes`, `content` (JSONB), and optional `image_url` and `video_url`. Lesson `content` should include a `description` and a `sections` array of `{ "title": "...", "body": "..." }`. Set `image_url` to an image URL and `video_url` to a browser-playable video URL (for example MP4 or WebM); lessons are ordered by `lesson_id`.
+- `signs`: `lesson_id`, `slug`, `word`, `meaning`, `category`, optional `hint` and `media_url`, and `is_published`.
+- `activities`: unique `slug`, `path_id`, `activity_type` (`practice`, `scenario`, or `challenge`), `title`, `content` (JSONB), and `is_published`. Activities are ordered by `activity_id`.
   - Scenario/challenge `content` can include `category`, `description`, `emoji`, `color`, and `duration_minutes`; it uses `questions: [{ "prompt": "...", "choices": [{ "id": "...", "label": "...", "meaning": "...", "is_correct": true }] }]`. Exactly one choice per question should be correct.
   - Practice `content` uses `word`, `meaning`, `steps` (array of strings), and optional `category`, `hint`, and `media_url`.
-- `achievements`: published achievement `title` (used as the API's display name), `description`, `criteria` (JSONB), `sort_order`, and `is_published`. The last two columns are added by the migration. `user_achievements` links unlocked definitions to users through `user_id` and `achievement_id`.
+- `achievements`: `slug`, `title` (used as the API's display name), `description`, and `criteria` (JSONB). `user_achievements` links earned definitions to users through `user_id` and `achievement_id`.
 - `activity_attempts` and `lesson_progress` are learner-generated records. Completing published activities and lessons creates these records; do not prefill fake completion metrics.
 
 The backend exposes learner-facing APIs for published content and progress:
 
-- `GET /api/paths` and `GET /api/paths/<id>` return published paths, lessons, lesson JSON content, and the signed-in learner's progress.
+- `GET /api/paths` and `GET /api/paths/<id>` return published paths, lessons, lesson JSON content, lesson image/video URLs, and the signed-in learner's progress.
 - `GET /api/vocabulary` returns published signs; `PUT`/`DELETE /api/vocabulary/<id>/favorite` saves/removes a learner's favorite.
 - `GET /api/scenarios`, `/api/challenges`, and `/api/practice` list published activities by type. `GET /api/activities/<id>` returns one activity.
 - `PUT /api/lessons/<id>/progress` saves an in-progress percentage from 1–99 without decreasing existing progress. `POST /api/lessons/<id>/complete` records 100% completion.
@@ -114,6 +123,9 @@ The backend exposes learner-facing APIs for published content and progress:
 - `GET /api/progress` returns activity history, weekly activity counts, earned achievement status, streak, and recent lesson progress. `GET /api/dashboard` returns learner summary metrics.
 
 These APIs require authentication. Content creation and publication are currently done by inserting/updating the PostgreSQL records directly; the app does not provide an admin content editor or fabricate FSL content.
+
+- `GET /api/classrooms` lists the signed-in learner's active classrooms; `POST /api/classrooms/join` joins one using its invite code.
+- Instructor routes create classrooms, add an existing learner account by email, and manage its roster. Learners can also join directly with the shared classroom code.
 
 The app's `/api/data/readiness` response and dashboard empty state list missing published content. Have FSL vocabulary and instructional material reviewed by Deaf FSL signers and qualified educators before publishing; the interface does not supply authoritative language content. SQLite and PostgreSQL are separate databases, and local SQLite accounts are not copied when switching to PostgreSQL.
 
@@ -182,19 +194,14 @@ The API uses these optional environment variables:
 
 | Variable | Local default | Purpose |
 | --- | --- | --- |
-| `TALINTURO_SECRET_KEY` | Development-only key | Flask session signing. Set a strong private value before deployment. |
+| `TALINTURO_SECRET_KEY` | Random per process if unset | Flask session signing. Set a stable private value in `.env`. |
 | `DATABASE_URL` | Unset | PostgreSQL connection URL. When set, PostgreSQL is used instead of SQLite. |
 | `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path when `DATABASE_URL` is unset. |
 | `TALINTURO_DEMO_MODE` | `false` | Enables local demo accounts and demo role switching. |
 | `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when serving over HTTPS. |
 | `FLASK_DEBUG` | `false` | Enables Flask debug mode when set to `true`; use only for local development. |
 
-For a local run with a custom session key, generate one in PowerShell before starting Flask. Keep it private; this environment variable applies only to the current terminal session.
-
-```powershell
-$env:TALINTURO_SECRET_KEY = (python -c "import secrets; print(secrets.token_urlsafe(32))")
-python app.py
-```
+The backend reads these settings from the project-root `.env` file. See [ENVIRONMENT.md](ENVIRONMENT.md) for all supported database and Google OAuth settings and instructions for generating a session key.
 
 Do not commit secrets. `TALINTURO_DEMO_MODE=false` disables demo role switching. Before public deployment, also use HTTPS with `TALINTURO_COOKIE_SECURE=true`, configure production CORS, and implement production-grade account recovery, authentication protections, and privacy controls. Do not enable secure cookies when testing over plain local HTTP. The camera feature is preview-only and does not recognize signs.
 

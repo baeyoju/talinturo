@@ -39,6 +39,13 @@ export async function api(path, options = {}) {
       throw new Error(missingRecords ? `${message} ${missingRecords}` : message);
     }
     return payload;
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        "Cannot reach the Flask API. Start the backend and check DATABASE_URL and PostgreSQL settings in the terminal running Flask.",
+      );
+    }
+    throw error;
   } finally {
     pendingRequests -= 1;
     notifyLoadingListeners();

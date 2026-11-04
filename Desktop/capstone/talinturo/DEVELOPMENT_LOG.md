@@ -1,5 +1,29 @@
 # Talinturo Development Log
 
+## November 4, 2026 — Lesson media, learning journey, and private configuration
+
+### Learning paths and lesson media
+
+- Updated the PostgreSQL lesson API to return `image_url` and `video_url`, and added both columns to `talinturo_database.sql` with idempotent `ALTER TABLE` statements for existing databases.
+- Redesigned the learning-path detail screen as a mobile-friendly game journey with a path progress summary, connected lesson nodes, lesson image previews, and expandable video demonstrations. Existing lesson titles, descriptions, sections, and progress states remain in use.
+- Added fallback UI for missing or unavailable lesson images and guidance for videos that cannot play in the browser.
+- Updated setup documentation with the lesson media fields and SQL needed to add them to an existing database.
+
+### Private environment configuration
+
+- Added project-root `.env` loading for backend configuration and ignored local root/backend environment files in Git. Added `.env.example` with safe, empty credential placeholders.
+- Removed hard-coded Google OAuth credentials and the fixed Flask session key from the backend. A random key is generated if a local key is not configured; deployments should set a stable private key.
+- Added `python-dotenv` to backend requirements and updated setup/environment documentation to use `.env` for database credentials, session key, and optional Google OAuth settings.
+- Documented that the previously embedded Google OAuth secret should be rotated.
+
+### Validation
+
+- `python -m unittest backend.test_app` — passed (27 tests), including lesson media serialization and database connection guidance.
+- Python syntax compilation — passed.
+- `npm run build` — passed.
+- `git diff --check` — passed; confirmed `.env` is ignored and `.env.example` is not ignored.
+- Live PostgreSQL connection was not tested because `DATABASE_URL` is not configured in the development environment.
+
 ## November 2, 2026 — PostgreSQL backend and Google authentication
 
 ### PostgreSQL backend integration

@@ -9,6 +9,7 @@ from functools import wraps
 from pathlib import Path
 
 from authlib.integrations.flask_client import OAuth
+from dotenv import load_dotenv
 from flask import Flask, g, jsonify, redirect, request, session
 from flask_cors import CORS
 
@@ -25,12 +26,24 @@ INTEGRITY_ERRORS = (sqlite3.IntegrityError,) + (
     (psycopg.IntegrityError,) if psycopg is not None else ()
 )
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE = Path(os.environ.get("TALINTURO_DATABASE", BASE_DIR / "talinturo.sqlite3"))
+load_dotenv(BASE_DIR.parent / ".env")
+DATABASE = Path(os.environ.get("TALINTURO_DATABASE") or BASE_DIR / "talinturo.sqlite3")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
 DEMO_MODE = os.environ.get("TALINTURO_DEMO_MODE", "false").lower() == "true"
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "891095864902-1ob6kdlui6v169tt3mnalovd074qeto8.apps.googleusercontent.com")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "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")
+USER_PK = "user_id" if USE_POSTGRES else "id"
+PATH_PK = "path_id" if USE_POSTGRES else "id"
+LESSON_PK = "lesson_id" if USE_POSTGRES else "id"
+SIGN_PK = "sign_id" if USE_POSTGRES else "id"
+ACTIVITY_PK = "activity_id" if USE_POSTGRES else "id"
+ATTEMPT_PK = "attempt_id" if USE_POSTGRES else "id"
+CLASSROOM_PK = "classroom_id" if USE_POSTGRES else "id"
+MEMBERSHIP_PK = "membership_id" if USE_POSTGRES else "id"
+ACHIEVEMENT_PK = "achievement_id" if USE_POSTGRES else "id"
+LESSON_PUBLISHED_FILTER = "" if USE_POSTGRES else "AND l.is_published = TRUE"
+SINGLE_LESSON_PUBLISHED_FILTER = "" if USE_POSTGRES else "AND is_published = TRUE"
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.environ.get(
     "GOOGLE_REDIRECT_URI", "http://127.0.0.1:5173/api/auth/google/callback"
 )
@@ -47,6 +60,9 @@ class PostgresDatabase:
     def commit(self):
         self.connection.commit()
 
+    def rollback(self):
+        self.connection.rollback()
+
     def close(self):
         self.connection.close()
 
@@ -55,9 +71,13 @@ class GoogleAccountNotFound(ValueError):
     pass
 
 
+class DatabaseConnectionError(RuntimeError):
+    pass
+
+
 app = Flask(__name__)
 app.config.update(
-    SECRET_KEY=os.environ.get("TALINTURO_SECRET_KEY", "local-development-key-change-before-deploy"),
+    SECRET_KEY=os.environ.get("TALINTURO_SECRET_KEY") or secrets.token_urlsafe(32),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("TALINTURO_COOKIE_SECURE", "false").lower() == "true",
@@ -82,13 +102,37 @@ def get_db():
         if USE_POSTGRES:
             if psycopg is None:
                 raise RuntimeError("PostgreSQL support requires psycopg. Install backend/requirements.txt.")
-            g.db = PostgresDatabase(psycopg.connect(DATABASE_URL, row_factory=dict_row))
+            try:
+                connection = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+            except psycopg.OperationalError as error:
+                raise DatabaseConnectionError(
+                    "Could not connect to PostgreSQL. Check DATABASE_URL and the PostgreSQL settings in the Flask terminal."
+                ) from error
+            g.db = PostgresDatabase(connection)
         else:
             DATABASE.parent.mkdir(parents=True, exist_ok=True)
             g.db = sqlite3.connect(DATABASE)
             g.db.row_factory = sqlite3.Row
             g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
+
+
+@app.errorhandler(DatabaseConnectionError)
+def handle_database_connection_error(_error):
+    return (
+        jsonify(
+            {
+                "error": "The learning database is unavailable. Check DATABASE_URL and PostgreSQL credentials, then restart Flask.",
+                "missing_data": [
+                    {
+                        "table": "DATABASE_URL",
+                        "records": "Set DATABASE_URL (and PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD if needed) in the same terminal that runs the backend.",
+                    }
+                ],
+            }
+        ),
+        503,
+    )
 
 
 @app.teardown_appcontext
@@ -105,14 +149,12 @@ def hash_password(password, salt=None):
 
 
 def stored_password_values(salt, password_hash):
-    if USE_POSTGRES:
-        return bytes.fromhex(salt), bytes.fromhex(password_hash)
     return salt, password_hash
 
 
-def insert_id(db, sql, params):
+def insert_id(db, sql, params, id_column="id"):
     if USE_POSTGRES:
-        return db.execute(f"{sql} RETURNING id", params).fetchone()["id"]
+        return db.execute(f"{sql} RETURNING {id_column}", params).fetchone()[id_column]
     return db.execute(sql, params).lastrowid
 
 
@@ -125,13 +167,13 @@ def require_postgres_schema(db):
         "learning_paths",
         "lessons",
         "activities",
-        "vocabulary_signs",
+        "signs",
         "activity_attempts",
         "lesson_progress",
         "achievements",
         "user_achievements",
         "user_preferences",
-        "user_vocabulary_favorites",
+        "sign_favorites",
     }
     rows = db.execute(
         "SELECT table_name FROM information_schema.tables "
@@ -142,24 +184,24 @@ def require_postgres_schema(db):
     if missing_tables:
         raise RuntimeError(
             "The PostgreSQL public schema is missing required tables: "
-            f"{', '.join(missing_tables)}. Restore backend/talinturo.sql and apply "
-            "backend/talinturo_backend_migration.sql before starting the API."
+            f"{', '.join(missing_tables)}. Restore talinturo_database.sql before "
+            "starting the API."
         )
     required_columns = {
-        "users": {"id", "name", "email", "password_salt", "password_hash", "role", "learner_type", "learning_goal"},
+        "users": {"user_id", "name", "email", "password_salt", "password_hash", "role", "learner_type", "learning_goal"},
         "oauth_accounts": {"provider", "subject", "user_id"},
         "user_preferences": {"user_id", "theme_mode", "reminders", "sound", "reduced_motion", "weekly_summary"},
-        "classrooms": {"id", "instructor_id", "name", "invite_code", "is_active", "created_at"},
-        "classroom_memberships": {"id", "classroom_id", "user_id", "invited_name", "invited_email", "status", "created_at"},
-        "learning_paths": {"id", "title", "description", "level", "sort_order", "is_published"},
-        "lessons": {"id", "path_id", "title", "description", "duration_minutes", "content", "sort_order", "is_published"},
-        "activities": {"id", "slug", "activity_type", "title", "content", "sort_order", "is_published"},
-        "vocabulary_signs": {"id", "word", "meaning", "category", "hint", "media_url", "is_published"},
-        "activity_attempts": {"activity_id", "user_id", "score", "status", "response", "completed_at"},
+        "classrooms": {"classroom_id", "instructor_id", "name", "invite_code", "is_active", "created_at"},
+        "classroom_memberships": {"membership_id", "classroom_id", "user_id", "invited_email", "status", "joined_at"},
+        "learning_paths": {"path_id", "slug", "title", "description", "level", "is_published"},
+        "lessons": {"lesson_id", "path_id", "slug", "title", "description", "duration_minutes", "content", "image_url", "video_url"},
+        "activities": {"activity_id", "path_id", "slug", "activity_type", "title", "content", "is_published"},
+        "signs": {"sign_id", "lesson_id", "slug", "word", "meaning", "category", "hint", "media_url", "is_published"},
+        "activity_attempts": {"attempt_id", "activity_id", "user_id", "score", "status", "response", "completed_at"},
         "lesson_progress": {"user_id", "lesson_id", "progress_percent", "updated_at"},
-        "achievements": {"id", "title", "description", "criteria", "sort_order", "is_published"},
-        "user_achievements": {"user_id", "achievement_id", "earned_at"},
-        "user_vocabulary_favorites": {"user_id", "vocabulary_sign_id"},
+        "achievements": {"achievement_id", "slug", "title", "description", "criteria"},
+        "user_achievements": {"user_id", "achievement_id", "earned_at", "is_published"},
+        "sign_favorites": {"user_id", "sign_id"},
     }
     column_rows = db.execute(
         "SELECT table_name, column_name FROM information_schema.columns "
@@ -176,8 +218,8 @@ def require_postgres_schema(db):
     if missing_columns:
         raise RuntimeError(
             "The PostgreSQL schema is missing required columns: "
-            f"{', '.join(missing_columns)}. Apply backend/talinturo_backend_migration.sql "
-            "before starting the API."
+            f"{', '.join(missing_columns)}. Restore the current talinturo_database.sql "
+            "schema before starting the API."
         )
 
 
@@ -363,7 +405,7 @@ def instructor_required(view):
 
 def public_user(row):
     return {
-        "id": row["id"],
+        "id": row[USER_PK],
         "name": row["name"],
         "email": row["email"],
         "role": row["role"],
@@ -381,8 +423,8 @@ def get_or_create_google_user(userinfo, allow_signup=True):
 
     db = get_db()
     linked_user = db.execute(
-        """SELECT users.* FROM users
-           JOIN oauth_accounts ON oauth_accounts.user_id = users.id
+        f"""SELECT users.* FROM users
+           JOIN oauth_accounts ON oauth_accounts.user_id = users.{USER_PK}
            WHERE oauth_accounts.provider = ? AND oauth_accounts.subject = ?""",
         ("google", subject),
     ).fetchone()
@@ -402,12 +444,13 @@ def get_or_create_google_user(userinfo, allow_signup=True):
             db,
             "INSERT INTO users(name, email, password_salt, password_hash) VALUES(?, ?, ?, ?)",
             (name, email, salt, password_hash),
+            USER_PK,
         )
-        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        user = db.execute(f"SELECT * FROM users WHERE {USER_PK} = ?", (user_id,)).fetchone()
 
     db.execute(
         "INSERT INTO oauth_accounts(provider, subject, user_id) VALUES(?, ?, ?)",
-        ("google", subject, user["id"]),
+        ("google", subject, user[USER_PK]),
     )
     db.commit()
     return user
@@ -473,7 +516,7 @@ def google_callback():
         return redirect(f"{FRONTEND_URL}/{route}?oauth_error=callback_failed")
 
     session.clear()
-    session["user_id"] = user["id"]
+    session["user_id"] = user[USER_PK]
     session["role"] = user["role"]
     if flow == "signup":
         return redirect(f"{FRONTEND_URL}/profile/setup")
@@ -494,7 +537,7 @@ def demo_login():
     if user is None:
         return json_error("No demo account is provisioned in this database.", 404)
     session.clear()
-    session["user_id"] = user["id"]
+    session["user_id"] = user[USER_PK]
     session["role"] = role
     return jsonify({"user": public_user(user)})
 
@@ -519,6 +562,7 @@ def signup():
             db,
             "INSERT INTO users(name, email, password_salt, password_hash) VALUES(?, ?, ?, ?)",
             (name, email, salt, password_hash),
+            USER_PK,
         )
         db.commit()
     except INTEGRITY_ERRORS:
@@ -526,7 +570,7 @@ def signup():
     session.clear()
     session["user_id"] = user_id
     session["role"] = "learner"
-    user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    user = db.execute(f"SELECT * FROM users WHERE {USER_PK} = ?", (user_id,)).fetchone()
     return jsonify({"user": public_user(user)}), 201
 
 
@@ -547,7 +591,7 @@ def login():
     if not hmac.compare_digest(supplied_hash, stored_hash):
         return json_error("Email or password is incorrect.", 401)
     session.clear()
-    session["user_id"] = user["id"]
+    session["user_id"] = user[USER_PK]
     session["role"] = user["role"]
     return jsonify({"user": public_user(user)})
 
@@ -561,7 +605,9 @@ def logout():
 @app.get("/api/auth/me")
 @login_required
 def current_user():
-    user = get_db().execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+    user = get_db().execute(
+        f"SELECT * FROM users WHERE {USER_PK} = ?", (session["user_id"],)
+    ).fetchone()
     return jsonify({"user": public_user(user), "demo_mode": DEMO_MODE})
 
 
@@ -570,8 +616,7 @@ def current_user():
 def preferences():
     db = get_db()
     db.execute(
-        "INSERT INTO user_preferences(user_id) VALUES(?) "
-        "ON CONFLICT(user_id) DO NOTHING",
+        "INSERT INTO user_preferences(user_id) VALUES(?) ON CONFLICT(user_id) DO NOTHING",
         (session["user_id"],),
     )
     db.commit()
@@ -634,19 +679,20 @@ def dashboard():
         return unavailable
     db = get_db()
     user_id = session["user_id"]
+    lesson_publish_filter = "" if USE_POSTGRES else "AND l.is_published = TRUE"
     events = db.execute(
-        """
+        f"""
         SELECT COUNT(*) AS activities_completed,
                ROUND(AVG(aa.score))::INTEGER AS average_score
         FROM activity_attempts aa
-        JOIN activities a ON a.id = aa.activity_id
+        JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         WHERE aa.user_id = ? AND aa.status = 'completed'
         """,
         (user_id,),
     ).fetchone()
     if session["role"] == "instructor":
         lessons_completed = db.execute(
-            """
+            f"""
             SELECT COUNT(*) AS total
             FROM (
                 SELECT DISTINCT lp.user_id, lp.lesson_id
@@ -654,7 +700,7 @@ def dashboard():
                 JOIN classroom_memberships cm
                   ON cm.user_id = lp.user_id AND cm.status = 'active'
                 JOIN classrooms c
-                  ON c.id = cm.classroom_id AND c.is_active = TRUE
+                  ON c.{CLASSROOM_PK} = cm.classroom_id AND c.is_active = TRUE
                 WHERE c.instructor_id = ? AND lp.progress_percent >= 100
             ) completed_lessons
             """,
@@ -671,31 +717,30 @@ def dashboard():
         (user_id,),
     ).fetchone()
     next_lesson = db.execute(
-        """
-        SELECT l.id, l.title, l.duration_minutes, p.id AS path_id,
+        f"""
+        SELECT l.{LESSON_PK} AS id, l.title, l.duration_minutes, p.{PATH_PK} AS path_id,
                p.title AS path_title, p.level,
                COALESCE(lp.progress_percent, 0) AS progress
         FROM lessons l
-        JOIN learning_paths p ON p.id = l.path_id AND p.is_published = TRUE
-        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = ?
-        WHERE l.is_published = TRUE
-          AND COALESCE(lp.progress_percent, 0) < 100
-        ORDER BY p.sort_order, l.sort_order, l.id
+        JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE
+        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.{LESSON_PK} AND lp.user_id = ?
+        WHERE COALESCE(lp.progress_percent, 0) < 100 {lesson_publish_filter}
+        ORDER BY p.{PATH_PK}, l.{LESSON_PK}
         LIMIT 1
         """,
         (user_id,),
     ).fetchone()
     featured_paths = db.execute(
-        """
-        SELECT p.id, p.title, p.description, p.level,
-               COUNT(DISTINCT l.id) AS lessons,
+        f"""
+        SELECT p.{PATH_PK} AS id, p.title, p.description, p.level,
+               COUNT(DISTINCT l.{LESSON_PK}) AS lessons,
                COALESCE(ROUND(AVG(lp.progress_percent))::INTEGER, 0) AS progress
         FROM learning_paths p
-        LEFT JOIN lessons l ON l.path_id = p.id AND l.is_published = TRUE
-        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = ?
+        LEFT JOIN lessons l ON l.path_id = p.{PATH_PK}
+        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.{LESSON_PK} AND lp.user_id = ?
         WHERE p.is_published = TRUE
-        GROUP BY p.id
-        ORDER BY p.sort_order, p.id
+        GROUP BY p.{PATH_PK}
+        ORDER BY p.{PATH_PK}
         LIMIT 2
         """,
         (user_id,),
@@ -726,19 +771,20 @@ def data_readiness():
             "learning_paths",
             "SELECT COUNT(*) AS total FROM learning_paths WHERE is_published = TRUE",
             (),
-            "Add at least one published learning path with a title, level, and sort order.",
+            "Add at least one published learning path with a title and level.",
         ),
         (
             "lessons",
-            "SELECT COUNT(*) AS total FROM lessons WHERE is_published = TRUE "
-            "AND CASE WHEN jsonb_typeof(content->'sections') = 'array' "
-            "THEN jsonb_array_length(content->'sections') > 0 ELSE FALSE END",
+            "SELECT COUNT(*) AS total FROM lessons l "
+            "JOIN learning_paths p ON p.path_id = l.path_id AND p.is_published = TRUE "
+            "WHERE CASE WHEN jsonb_typeof(l.content->'sections') = 'array' "
+            "THEN jsonb_array_length(l.content->'sections') > 0 ELSE FALSE END",
             (),
-            "Add published lessons linked to a learning path, with title, duration, and a content.sections array.",
+            "Add lessons linked to a published learning path, with title, duration, and a content.sections array.",
         ),
         (
-            "vocabulary_signs",
-            "SELECT COUNT(*) AS total FROM vocabulary_signs WHERE is_published = TRUE",
+            "signs",
+            "SELECT COUNT(*) AS total FROM signs WHERE is_published = TRUE",
             (),
             "Add published vocabulary signs with a word, meaning, category, and optional hint/media URL.",
         ),
@@ -771,9 +817,9 @@ def data_readiness():
         ),
         (
             "achievements",
-            "SELECT COUNT(*) AS total FROM achievements WHERE is_published = TRUE",
+            "SELECT COUNT(*) AS total FROM achievements",
             (),
-            "Add published achievement definitions with a name, description, and unlock criteria.",
+            "Add achievement definitions with a name, description, and unlock criteria.",
         ),
     ]
     return jsonify(
@@ -795,16 +841,17 @@ def learning_paths():
     if unavailable:
         return unavailable
     rows = get_db().execute(
-        """
-        SELECT p.id, p.title, p.description, p.level, COUNT(DISTINCT l.id) AS lessons,
+        f"""
+        SELECT p.{PATH_PK} AS id, p.title, p.description, p.level,
+               COUNT(DISTINCT l.{LESSON_PK}) AS lessons,
                COALESCE(ROUND(AVG(lp.progress_percent))::INTEGER, 0) AS progress
         FROM learning_paths p
-        LEFT JOIN lessons l ON l.path_id = p.id AND l.is_published = TRUE
+        LEFT JOIN lessons l ON l.path_id = p.{PATH_PK}
         LEFT JOIN lesson_progress lp
-          ON lp.lesson_id = l.id AND lp.user_id = ?
+          ON lp.lesson_id = l.{LESSON_PK} AND lp.user_id = ?
         WHERE p.is_published = TRUE
-        GROUP BY p.id
-        ORDER BY p.sort_order, p.id
+        GROUP BY p.{PATH_PK}
+        ORDER BY p.{PATH_PK}
         """,
         (session["user_id"],),
     ).fetchall()
@@ -819,21 +866,22 @@ def learning_path_detail(path_id):
         return unavailable
     db = get_db()
     path = db.execute(
-        "SELECT id, title, description, level FROM learning_paths "
-        "WHERE id = ? AND is_published = TRUE",
+        f"SELECT {PATH_PK} AS id, title, description, level FROM learning_paths "
+        f"WHERE {PATH_PK} = ? AND is_published = TRUE",
         (path_id,),
     ).fetchone()
     if path is None:
         return json_error("This learning path is not available.", 404)
     lessons = db.execute(
-        """
-        SELECT l.id, l.title, l.duration_minutes, l.content,
+        f"""
+        SELECT l.{LESSON_PK} AS id, l.title, l.duration_minutes, l.content,
+               l.image_url, l.video_url,
                COALESCE(lp.progress_percent, 0) AS progress
         FROM lessons l
         LEFT JOIN lesson_progress lp
-          ON lp.lesson_id = l.id AND lp.user_id = ?
-        WHERE l.path_id = ? AND l.is_published = TRUE
-        ORDER BY l.sort_order, l.id
+          ON lp.lesson_id = l.{LESSON_PK} AND lp.user_id = ?
+        WHERE l.path_id = ? {LESSON_PUBLISHED_FILTER}
+        ORDER BY l.{LESSON_PK}
         """,
         (session["user_id"], path_id),
     ).fetchall()
@@ -848,7 +896,12 @@ def complete_lesson(lesson_id):
         return unavailable
     db = get_db()
     lesson = db.execute(
-        "SELECT id, title, content FROM lessons WHERE id = ? AND is_published = TRUE",
+        f"""
+        SELECT l.{LESSON_PK} AS id, l.title, l.content
+        FROM lessons l
+        JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE
+        WHERE l.{LESSON_PK} = ? {SINGLE_LESSON_PUBLISHED_FILTER}
+        """,
         (lesson_id,),
     ).fetchone()
     if lesson is None:
@@ -895,7 +948,12 @@ def update_lesson_progress(lesson_id):
         return unavailable
     db = get_db()
     lesson = db.execute(
-        "SELECT id, content FROM lessons WHERE id = ? AND is_published = TRUE",
+        f"""
+        SELECT l.{LESSON_PK} AS id, l.content
+        FROM lessons l
+        JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE
+        WHERE l.{LESSON_PK} = ? {SINGLE_LESSON_PUBLISHED_FILTER}
+        """,
         (lesson_id,),
     ).fetchone()
     if lesson is None:
@@ -958,12 +1016,12 @@ def vocabulary():
     if unavailable:
         return unavailable
     rows = get_db().execute(
-        """
-        SELECT v.id, v.word, v.meaning, v.category, v.hint, v.media_url,
+        f"""
+        SELECT v.{SIGN_PK} AS id, v.word, v.meaning, v.category, v.hint, v.media_url,
                (f.user_id IS NOT NULL) AS is_saved
-        FROM vocabulary_signs v
-        LEFT JOIN user_vocabulary_favorites f
-          ON f.vocabulary_sign_id = v.id AND f.user_id = ?
+        FROM signs v
+        LEFT JOIN sign_favorites f
+          ON f.sign_id = v.{SIGN_PK} AND f.user_id = ?
         WHERE v.is_published = TRUE
         ORDER BY v.category, v.word
         """,
@@ -980,22 +1038,21 @@ def vocabulary_favorite(sign_id):
         return unavailable
     db = get_db()
     sign = db.execute(
-        "SELECT id FROM vocabulary_signs WHERE id = ? AND is_published = TRUE",
+        f"SELECT {SIGN_PK} FROM signs WHERE {SIGN_PK} = ? AND is_published = TRUE",
         (sign_id,),
     ).fetchone()
     if sign is None:
         return json_error("This vocabulary sign is not available.", 404)
     if request.method == "PUT":
         db.execute(
-            "INSERT INTO user_vocabulary_favorites(user_id, vocabulary_sign_id) "
-            "VALUES(?, ?) ON CONFLICT(user_id, vocabulary_sign_id) DO NOTHING",
+            "INSERT INTO sign_favorites(user_id, sign_id) "
+            "VALUES(?, ?) ON CONFLICT(user_id, sign_id) DO NOTHING",
             (session["user_id"], sign_id),
         )
         saved = True
     else:
         db.execute(
-            "DELETE FROM user_vocabulary_favorites "
-            "WHERE user_id = ? AND vocabulary_sign_id = ?",
+            "DELETE FROM sign_favorites WHERE user_id = ? AND sign_id = ?",
             (session["user_id"], sign_id),
         )
         saved = False
@@ -1010,8 +1067,8 @@ def scenarios():
     if unavailable:
         return unavailable
     rows = get_db().execute(
-        "SELECT id, slug, title, content FROM activities "
-        "WHERE activity_type = 'scenario' AND is_published = TRUE ORDER BY sort_order, id"
+        f"SELECT {ACTIVITY_PK} AS id, slug, title, content FROM activities "
+        f"WHERE activity_type = 'scenario' AND is_published = TRUE ORDER BY {ACTIVITY_PK}"
     ).fetchall()
     return jsonify(
         {
@@ -1039,8 +1096,8 @@ def challenges():
     if unavailable:
         return unavailable
     rows = get_db().execute(
-        "SELECT id, slug, title, content FROM activities "
-        "WHERE activity_type = 'challenge' AND is_published = TRUE ORDER BY sort_order, id"
+        f"SELECT {ACTIVITY_PK} AS id, slug, title, content FROM activities "
+        f"WHERE activity_type = 'challenge' AND is_published = TRUE ORDER BY {ACTIVITY_PK}"
     ).fetchall()
     return jsonify({"challenges": [dict(row) for row in rows]})
 
@@ -1052,8 +1109,8 @@ def practice_activities():
     if unavailable:
         return unavailable
     rows = get_db().execute(
-        "SELECT id, slug, title, content FROM activities "
-        "WHERE activity_type = 'practice' AND is_published = TRUE ORDER BY sort_order, id"
+        f"SELECT {ACTIVITY_PK} AS id, slug, title, content FROM activities "
+        f"WHERE activity_type = 'practice' AND is_published = TRUE ORDER BY {ACTIVITY_PK}"
     ).fetchall()
     return jsonify({"activities": [dict(row) for row in rows]})
 
@@ -1065,10 +1122,10 @@ def activity_detail(activity_id):
     if unavailable:
         return unavailable
     row = get_db().execute(
-        """
-        SELECT id, slug, activity_type, title, content
+        f"""
+        SELECT {ACTIVITY_PK} AS id, slug, activity_type, title, content
         FROM activities
-        WHERE id = ? AND is_published = TRUE
+        WHERE {ACTIVITY_PK} = ? AND is_published = TRUE
         """,
         (activity_id,),
     ).fetchone()
@@ -1089,8 +1146,8 @@ def record_progress():
         return unavailable
     db = get_db()
     activity = db.execute(
-        "SELECT id, title, activity_type, content FROM activities "
-        "WHERE id = ? AND is_published = TRUE",
+        f"SELECT {ACTIVITY_PK} AS id, title, activity_type, content FROM activities "
+        f"WHERE {ACTIVITY_PK} = ? AND is_published = TRUE",
         (activity_id,),
     ).fetchone()
     if activity is None:
@@ -1150,10 +1207,10 @@ def progress():
     db = get_db()
     user_id = session["user_id"]
     rows = db.execute(
-        """
+        f"""
         SELECT aa.activity_id, a.title AS activity, aa.score, aa.completed_at AS created_at
         FROM activity_attempts aa
-        JOIN activities a ON a.id = aa.activity_id
+        JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         WHERE aa.user_id = ? AND aa.status = 'completed'
         ORDER BY aa.completed_at DESC
         LIMIT 50
@@ -1166,8 +1223,9 @@ def progress():
         (user_id,),
     ).fetchone()["total"]
     weekly_activity = db.execute(
-        """
-        SELECT to_char(day::date, 'YYYY-MM-DD') AS activity_date, COUNT(aa.id) AS completed
+        f"""
+        SELECT to_char(day::date, 'YYYY-MM-DD') AS activity_date,
+               COUNT(aa.{ATTEMPT_PK}) AS completed
         FROM generate_series(CURRENT_DATE - 6, CURRENT_DATE, INTERVAL '1 day') AS days(day)
         LEFT JOIN activity_attempts aa
           ON aa.user_id = ? AND aa.status = 'completed'
@@ -1178,25 +1236,24 @@ def progress():
         (user_id,),
     ).fetchall()
     achievements = db.execute(
-        """
-        SELECT a.id, a.title AS name, a.description,
+        f"""
+        SELECT a.{ACHIEVEMENT_PK} AS id, a.title AS name, a.description,
                (ua.user_id IS NOT NULL) AS earned
         FROM achievements a
         LEFT JOIN user_achievements ua
-          ON ua.achievement_id = a.id AND ua.user_id = ?
-        WHERE a.is_published = TRUE
-        ORDER BY a.sort_order, a.id
+          ON ua.achievement_id = a.{ACHIEVEMENT_PK} AND ua.user_id = ?
+        ORDER BY a.{ACHIEVEMENT_PK}
         """,
         (user_id,),
     ).fetchall()
     lesson_records = db.execute(
-        """
+        f"""
         SELECT lp.lesson_id, l.title AS lesson, p.title AS path,
                lp.status, lp.progress_percent, lp.best_score,
                lp.started_at, lp.completed_at, lp.updated_at
         FROM lesson_progress lp
-        JOIN lessons l ON l.id = lp.lesson_id
-        JOIN learning_paths p ON p.id = l.path_id
+        JOIN lessons l ON l.{LESSON_PK} = lp.lesson_id
+        JOIN learning_paths p ON p.{PATH_PK} = l.path_id
         WHERE lp.user_id = ?
         ORDER BY lp.updated_at DESC, lp.lesson_id
         LIMIT 50
@@ -1223,20 +1280,20 @@ def instructor_learners():
         return unavailable
     db = get_db()
     rows = db.execute(
-        """
-        SELECT cm.id AS membership_id, u.id AS user_id,
-               COALESCE(u.name, cm.invited_name) AS name,
-               COUNT(DISTINCT aa.id) AS activities,
+        f"""
+        SELECT cm.{MEMBERSHIP_PK} AS membership_id, u.{USER_PK} AS user_id,
+               u.name AS name,
+               COUNT(DISTINCT aa.{ATTEMPT_PK}) AS activities,
                AVG(aa.score) AS accuracy,
                MAX(aa.completed_at) AS last_active
         FROM classrooms c
-        JOIN classroom_memberships cm ON cm.classroom_id = c.id
-        LEFT JOIN users u ON u.id = cm.user_id AND u.role = 'learner'
+        JOIN classroom_memberships cm ON cm.classroom_id = c.{CLASSROOM_PK}
+        JOIN users u ON u.{USER_PK} = cm.user_id AND u.role = 'learner'
         LEFT JOIN activity_attempts aa
-          ON aa.user_id = u.id AND aa.status = 'completed'
+          ON aa.user_id = u.{USER_PK} AND aa.status = 'completed'
         WHERE c.instructor_id = ? AND c.is_active = TRUE
-          AND cm.status = 'active' AND cm.user_id IS NOT NULL
-        GROUP BY cm.id, u.id, u.name, cm.invited_name
+          AND cm.status = 'active'
+        GROUP BY cm.{MEMBERSHIP_PK}, u.{USER_PK}, u.name
         ORDER BY name
         """,
         (session["user_id"],),
@@ -1265,17 +1322,17 @@ def instructor_learner_detail(learner_id):
         return unavailable
     db = get_db()
     row = db.execute(
-        """
-        SELECT u.id, u.name, COUNT(DISTINCT aa.id) AS activities,
+        f"""
+        SELECT u.{USER_PK} AS id, u.name, COUNT(DISTINCT aa.{ATTEMPT_PK}) AS activities,
                AVG(aa.score) AS accuracy, MAX(aa.completed_at) AS last_active
         FROM users u
-        JOIN classroom_memberships cm ON cm.user_id = u.id AND cm.status = 'active'
-        JOIN classrooms c ON c.id = cm.classroom_id
+        JOIN classroom_memberships cm ON cm.user_id = u.{USER_PK} AND cm.status = 'active'
+        JOIN classrooms c ON c.{CLASSROOM_PK} = cm.classroom_id
         LEFT JOIN activity_attempts aa
-          ON aa.user_id = u.id AND aa.status = 'completed'
-        WHERE u.id = ? AND u.role = 'learner'
+          ON aa.user_id = u.{USER_PK} AND aa.status = 'completed'
+        WHERE u.{USER_PK} = ? AND u.role = 'learner'
           AND c.instructor_id = ? AND c.is_active = TRUE
-        GROUP BY u.id, u.name
+        GROUP BY u.{USER_PK}, u.name
         """,
         (learner_id, session["user_id"]),
     ).fetchone()
@@ -1291,15 +1348,15 @@ def instructor_learner_detail(learner_id):
         "last_active": row["last_active"],
     }
     events = db.execute(
-        """
+        f"""
         SELECT a.title AS activity, aa.score, aa.completed_at AS created_at
         FROM activity_attempts aa
-        JOIN activities a ON a.id = aa.activity_id
+        JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         JOIN classroom_memberships cm ON cm.user_id = aa.user_id AND cm.status = 'active'
-        JOIN classrooms c ON c.id = cm.classroom_id
+        JOIN classrooms c ON c.{CLASSROOM_PK} = cm.classroom_id
         WHERE aa.user_id = ? AND aa.status = 'completed'
           AND c.instructor_id = ? AND c.is_active = TRUE
-        GROUP BY aa.id, a.title, aa.score, aa.completed_at
+        GROUP BY aa.{ATTEMPT_PK}, a.title, aa.score, aa.completed_at
         ORDER BY aa.completed_at DESC
         LIMIT 10
         """,
@@ -1313,15 +1370,15 @@ def instructor_learner_detail(learner_id):
 def instructor_classrooms():
     if USE_POSTGRES:
         rows = get_db().execute(
-            """
-            SELECT c.id, c.name, c.invite_code AS code, c.description, c.created_at,
-                   COUNT(m.id) AS student_count
+            f"""
+            SELECT c.{CLASSROOM_PK} AS id, c.name, c.invite_code AS code, c.description, c.created_at,
+                   COUNT(m.{MEMBERSHIP_PK}) AS student_count
             FROM classrooms c
             LEFT JOIN classroom_memberships m
-              ON m.classroom_id = c.id AND m.status <> 'removed'
+              ON m.classroom_id = c.{CLASSROOM_PK} AND m.status = 'active'
             WHERE c.instructor_id = ? AND c.is_active = TRUE
-            GROUP BY c.id
-            ORDER BY c.id
+            GROUP BY c.{CLASSROOM_PK}
+            ORDER BY c.{CLASSROOM_PK}
             """,
             (session["user_id"],),
         ).fetchall()
@@ -1341,14 +1398,71 @@ def instructor_classrooms():
     return jsonify({"classrooms": [dict(row) for row in rows]})
 
 
+@app.get("/api/classrooms")
+@login_required
+def learner_classrooms():
+    if session["role"] != "learner":
+        return json_error("Learner access is required.", 403)
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    rows = get_db().execute(
+        f"""
+        SELECT c.{CLASSROOM_PK} AS id, c.name, c.description, c.created_at, cm.joined_at
+        FROM classroom_memberships cm
+        JOIN classrooms c ON c.{CLASSROOM_PK} = cm.classroom_id
+        WHERE cm.user_id = ? AND cm.status = 'active' AND c.is_active = TRUE
+        ORDER BY c.{CLASSROOM_PK}
+        """,
+        (session["user_id"],),
+    ).fetchall()
+    return jsonify({"classrooms": [dict(row) for row in rows]})
+
+
+@app.post("/api/classrooms/join")
+@login_required
+def join_classroom():
+    if session["role"] != "learner":
+        return json_error("Learner access is required.", 403)
+    unavailable = postgres_data_required()
+    if unavailable:
+        return unavailable
+    data = request.get_json(silent=True) or {}
+    code = str(data.get("code", "")).strip().upper()
+    if not code or len(code) > 100:
+        return json_error("Enter a valid classroom code.", 400)
+    db = get_db()
+    classroom = db.execute(
+        f"SELECT {CLASSROOM_PK} AS id, name, description, invite_code AS code "
+        "FROM classrooms WHERE upper(invite_code) = ? AND is_active = TRUE",
+        (code,),
+    ).fetchone()
+    if classroom is None:
+        return json_error("No active classroom uses that code.", 404)
+    try:
+        membership_id = insert_id(
+            db,
+            "INSERT INTO classroom_memberships"
+            "(user_id, classroom_id, status, joined_at) "
+            "VALUES(?, ?, 'active', CURRENT_TIMESTAMP)",
+            (session["user_id"], classroom["id"]),
+            MEMBERSHIP_PK,
+        )
+        db.commit()
+    except INTEGRITY_ERRORS:
+        db.rollback()
+        return json_error("You have already joined this classroom.", 409)
+    return jsonify({"classroom": dict(classroom), "membership_id": membership_id}), 201
+
+
 @app.get("/api/instructor/classrooms/<int:classroom_id>/students")
 @instructor_required
 def classroom_students(classroom_id):
     db = get_db()
     if USE_POSTGRES:
         classroom = db.execute(
-            "SELECT id, name, invite_code AS code FROM classrooms "
-            "WHERE id = ? AND instructor_id = ? AND is_active = TRUE",
+            f"SELECT {CLASSROOM_PK} AS id, name, invite_code AS code FROM classrooms "
+            f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ? AND is_active = TRUE",
             (classroom_id, session["user_id"]),
         ).fetchone()
     else:
@@ -1360,13 +1474,12 @@ def classroom_students(classroom_id):
         return json_error("Classroom not found.", 404)
     if USE_POSTGRES:
         students = db.execute(
-            """
-            SELECT cm.id, COALESCE(u.name, cm.invited_name) AS name,
-                   COALESCE(u.email, cm.invited_email) AS email, cm.created_at
+            f"""
+            SELECT cm.{MEMBERSHIP_PK} AS id, u.name, u.email, cm.joined_at AS created_at
             FROM classroom_memberships cm
-            LEFT JOIN users u ON u.id = cm.user_id
-            WHERE cm.classroom_id = ? AND cm.status <> 'removed'
-            ORDER BY cm.id
+            JOIN users u ON u.{USER_PK} = cm.user_id
+            WHERE cm.classroom_id = ? AND cm.status = 'active'
+            ORDER BY cm.{MEMBERSHIP_PK}
             """,
             (classroom_id,),
         ).fetchall()
@@ -1385,25 +1498,44 @@ def add_classroom_student(classroom_id):
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
     email = str(data.get("email", "")).strip().lower()
-    if not name or len(name) > 70:
+    if (not USE_POSTGRES and not name) or len(name) > 70:
         return json_error("Learner name must be between 1 and 70 characters.", 400)
     if len(email) > 254 or "@" not in email:
         return json_error("Enter a valid learner email address.", 400)
     db = get_db()
-    classroom = db.execute(
-        "SELECT id FROM classrooms WHERE id = ? AND instructor_id = ?",
-        (classroom_id, session["user_id"]),
-    ).fetchone()
+    if USE_POSTGRES:
+        classroom = db.execute(
+            f"SELECT {CLASSROOM_PK} FROM classrooms "
+            f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ? AND is_active = TRUE",
+            (classroom_id, session["user_id"]),
+        ).fetchone()
+    else:
+        classroom = db.execute(
+            f"SELECT {CLASSROOM_PK} FROM classrooms "
+            f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ?",
+            (classroom_id, session["user_id"]),
+        ).fetchone()
     if classroom is None:
         return json_error("Classroom not found.", 404)
     try:
         if USE_POSTGRES:
+            student_account = db.execute(
+                f"SELECT {USER_PK} AS id, name, email FROM users "
+                f"WHERE lower(email) = ? AND role = 'learner' AND is_active = TRUE",
+                (email,),
+            ).fetchone()
+            if student_account is None:
+                return json_error(
+                    "Create the learner account before adding them to a classroom.",
+                    404,
+                )
             student_id = insert_id(
                 db,
                 "INSERT INTO classroom_memberships"
-                "(classroom_id, invited_name, invited_email, status) "
-                "VALUES(?, ?, ?, 'invited')",
-                (classroom_id, name, email),
+                "(classroom_id, user_id, invited_email, status, joined_at) "
+                "VALUES(?, ?, ?, 'active', CURRENT_TIMESTAMP)",
+                (classroom_id, student_account["id"], email),
+                MEMBERSHIP_PK,
             )
         else:
             cursor = db.execute(
@@ -1413,11 +1545,13 @@ def add_classroom_student(classroom_id):
             student_id = cursor.lastrowid
         db.commit()
     except INTEGRITY_ERRORS:
+        db.rollback()
         return json_error("That learner is already in this classroom.", 409)
     if USE_POSTGRES:
         student = db.execute(
-            "SELECT id, invited_name AS name, invited_email AS email, created_at "
-            "FROM classroom_memberships WHERE id = ?",
+            f"SELECT cm.{MEMBERSHIP_PK} AS id, u.name, u.email, cm.joined_at AS created_at "
+            "FROM classroom_memberships cm JOIN users u ON u.user_id = cm.user_id "
+            f"WHERE cm.{MEMBERSHIP_PK} = ?",
             (student_id,),
         ).fetchone()
     else:
@@ -1442,7 +1576,7 @@ def create_classroom():
     code_column = "invite_code" if USE_POSTGRES else "code"
     code = secrets.token_urlsafe(5).replace("-", "").replace("_", "").upper()[:8]
     while db.execute(
-        f"SELECT id FROM classrooms WHERE {code_column} = ?", (code,)
+        f"SELECT {CLASSROOM_PK} FROM classrooms WHERE {code_column} = ?", (code,)
     ).fetchone():
         code = secrets.token_urlsafe(5).replace("-", "").replace("_", "").upper()[:8]
     if USE_POSTGRES:
@@ -1451,6 +1585,7 @@ def create_classroom():
             "INSERT INTO classrooms(instructor_id, name, description, invite_code) "
             "VALUES(?, ?, ?, ?)",
             (session["user_id"], name, description, code),
+            CLASSROOM_PK,
         )
     else:
         classroom_id = insert_id(
@@ -1483,11 +1618,13 @@ def update_profile():
         return json_error("Choose a valid learning goal.", 400)
     db = get_db()
     db.execute(
-        "UPDATE users SET name = ?, learner_type = ?, learning_goal = ? WHERE id = ?",
+        f"UPDATE users SET name = ?, learner_type = ?, learning_goal = ? WHERE {USER_PK} = ?",
         (name, learner_type, learning_goal, session["user_id"]),
     )
     db.commit()
-    user = db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+    user = db.execute(
+        f"SELECT * FROM users WHERE {USER_PK} = ?", (session["user_id"],)
+    ).fetchone()
     return jsonify({"user": public_user(user)})
 
 
