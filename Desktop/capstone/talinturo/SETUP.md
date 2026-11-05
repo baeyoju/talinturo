@@ -57,16 +57,16 @@ Open the URL Vite prints, normally `http://127.0.0.1:5173`. Vite forwards reques
 
 ### Connect PostgreSQL
 
-The backend uses PostgreSQL whenever `DATABASE_URL` is set. The current schema is in the project-root `talinturo_database.sql`; it creates the tables and columns required by the API but contains no account or learning-content rows.
+The backend uses PostgreSQL whenever `DATABASE_URL` is set. The project-root `talinturo.sql` dump contains the tables and data currently exported from PostgreSQL.
 
 #### If the database is empty
 
 ```powershell
 createdb -U postgres -W talinturo
-psql -U postgres -W -d talinturo -v ON_ERROR_STOP=1 -f .\talinturo_database.sql
+psql -U postgres -W -d talinturo -v ON_ERROR_STOP=1 -f .\talinturo.sql
 ```
 
-Use a new empty database for this schema. The script's `CREATE TABLE IF NOT EXISTS` statements do not migrate an older schema; back up existing data and plan an explicit migration before using it with an existing Talinturo database.
+Use a new empty database for this dump. It creates tables and inserts exported rows; it is not idempotent and does not migrate an older schema. Back up existing data and plan an explicit migration before using it with an existing Talinturo database. Review inserted rows for private learner data before importing or sharing the dump.
 
 Then edit `.env` in the project root. `DATABASE_URL` selects PostgreSQL; `PG*` values provide connection details and credentials:
 
@@ -89,6 +89,14 @@ Replace the sample password and session key with private values. Start Flask fro
 
 If PostgreSQL is remote or uses a different username, host, or port, change those values. The API validates its required tables and columns at startup; `/api/health` checks the active database connection. Account signup/login, Google OAuth, profile, preferences, learning content, and progress all use the database selected by `DATABASE_URL`. SQLite accounts are not automatically copied into PostgreSQL.
 
+#### If using Supabase
+
+Talinturo uses Supabase as managed PostgreSQL through its existing Flask/`psycopg` database connection. In Supabase, open your project and select **Connect**, then copy a PostgreSQL connection URI (the Session Pooler URI is suitable for local development). Replace `DATABASE_URL` in the root `.env` with that full URI, using your Supabase database password if prompted. Preserve the URI's host, port, username, database name, and SSL options. URL-encode special characters in the password.
+
+The Supabase Project URL and `anon`/publishable or `service_role`/secret API keys are for Supabase APIs; this Flask app does not use them to connect to the database. Do not add them as `SUPABASE_URL` or `SUPABASE_KEY` for this setup. Keep the connection URI private, and do not send it in chat or commit it. The standalone `/todos` sample is not part of this app.
+
+Run the project-root `talinturo.sql` in Supabase's **SQL Editor** to restore the exported schema and rows. Back up any existing data first; the dump is not a migration for a different or older schema. Review and remove private or unwanted account rows before importing. Restart Flask after updating `.env`, then check `http://127.0.0.1:5000/api/health`.
+
 If you already have the current schema in an existing database, make sure the lesson media columns are present:
 
 ```sql
@@ -100,9 +108,32 @@ Set `DATABASE_URL` and any required `PG*` variables in `.env`, then restart Flas
 
 In another PowerShell window from the project root, start the frontend with `npm run dev`. Open `http://127.0.0.1:5173`; Vite proxies `/api` requests to Flask. Both servers must remain running.
 
-### Records needed to populate the app
+### Admin and instructor access
 
-The app intentionally does not generate FSL lessons, signs, questions, badges, learners, or progress. Add and publish records in PostgreSQL:
+Open `/instructor/sign-in` for the dedicated educator sign-in page. Admins sign in at `/login` and are routed to `/admin`. The admin workspace requires PostgreSQL and supports account activation, creating learner/instructor accounts, creating learning paths and lessons, and publishing or unpublishing them.
+
+Promote a trusted existing account to the admin role from the PostgreSQL database. Replace the email with that account's address and run this once:
+
+```sql
+UPDATE users SET role = 'admin' WHERE lower(email) = lower('admin@example.com');
+```
+
+The admin role is deliberately not offered in public signup or the account creation form. Existing PostgreSQL databases also need the account status and lesson publish flags:
+
+```sql
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT TRUE;
+```
+
+Restart Flask after the migration. New lessons begin as drafts; publish a lesson and its learning path before learners can see it.
+
+### Sample records
+
+The `talinturo.sql` dump includes `INSERT` statements for rows exported from its source database. It is a point-in-time dump, not a repeatable seed script; run it only once against a new empty database. Inspect the inserted rows and remove private learner or account data that should not be copied to the target database.
+
+Review and verify imported learning records before using them for instruction. Add and publish verified learning records as needed:
 
 - `learning_paths`: `slug`, `title`, `description`, `level`, and `is_published`. Paths are ordered by `path_id`.
 - `lessons`: `path_id`, `slug`, `title`, `duration_minutes`, `content` (JSONB), and optional `image_url` and `video_url`. Lesson `content` should include a `description` and a `sections` array of `{ "title": "...", "body": "..." }`. Set `image_url` to an image URL and `video_url` to a browser-playable video URL (for example MP4 or WebM); lessons are ordered by `lesson_id`.
@@ -201,7 +232,7 @@ The API uses these optional environment variables:
 | `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when serving over HTTPS. |
 | `FLASK_DEBUG` | `false` | Enables Flask debug mode when set to `true`; use only for local development. |
 
-The backend reads these settings from the project-root `.env` file. See [ENVIRONMENT.md](ENVIRONMENT.md) for all supported database and Google OAuth settings and instructions for generating a session key.
+The backend reads these settings from the project-root `.env` file. See [DATABASE_CONNECTION_SETUP.md](DATABASE_CONNECTION_SETUP.md) for detailed local PostgreSQL and Supabase IPv4/IPv6 setup and troubleshooting. See [ENVIRONMENT.md](ENVIRONMENT.md) for all supported database and Google OAuth settings and instructions for generating a session key.
 
 Do not commit secrets. `TALINTURO_DEMO_MODE=false` disables demo role switching. Before public deployment, also use HTTPS with `TALINTURO_COOKIE_SECURE=true`, configure production CORS, and implement production-grade account recovery, authentication protections, and privacy controls. Do not enable secure cookies when testing over plain local HTTP. The camera feature is preview-only and does not recognize signs.
 

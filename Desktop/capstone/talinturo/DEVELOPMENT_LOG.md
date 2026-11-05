@@ -1,5 +1,20 @@
 # Talinturo Development Log
 
+## November 5, 2026 — Database connection setup guide
+
+### PostgreSQL connection documentation
+
+- Added `DATABASE_CONNECTION_SETUP.md` with local PostgreSQL setup through DBeaver or pgAdmin and Supabase direct/session-pooler connection instructions.
+- Clarified that DBeaver and pgAdmin are clients and require a running PostgreSQL server for a local database.
+- Documented IPv6 requirements for Supabase direct connections, IPv4 support through the Session pooler, `DATABASE_URL` precedence, schema loading, and connection error triage.
+- Updated README and setup instructions to use the current `talinturo.sql` dump and explain that its exported account rows should be reviewed before import.
+- Linked the guide from the main setup and documentation pages.
+
+### Validation
+
+- Reviewed the connection steps against backend configuration loading and startup behavior.
+- Documentation-only change; no database connection or schema was modified.
+
 ## November 4, 2026 — Lesson media, learning journey, and private configuration
 
 ### Learning paths and lesson media

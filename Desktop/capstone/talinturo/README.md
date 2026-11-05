@@ -7,7 +7,8 @@ Talinturo is a Filipino Sign Language (FSL) learning app for learners, families,
 ## What is included
 
 - **Learner experience:** Dashboard, learning paths, vocabulary search, camera practice preview, scenario activity and results, level challenge, progress, and classroom joining by invite code.
-- **Instructor experience:** Dashboard, learner roster and details, virtual classrooms, classroom creation, and student management.
+- **Instructor experience:** Dedicated instructor sign-in, dashboard, learner roster and details, virtual classrooms, classroom creation, and student management.
+- **Admin workspace:** Account creation and activation, learning path and lesson authoring, and draft/publish controls for learning content.
 - **Shared screens:** Landing, sign in and sign up, profile setup and editing, settings, password recovery information, help, and not-found handling.
 - **API:** Account creation and login, profile and preferences, PostgreSQL content and progress endpoints, learner classroom membership, and instructor classroom and roster endpoints.
 
@@ -30,7 +31,7 @@ Flask API ─── PostgreSQL
          └── SQLite (optional local development/testing)
 ```
 
-In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Load `talinturo_database.sql` into a new PostgreSQL database and configure `DATABASE_URL` to use it. The API does not silently substitute sample content when the database is empty. See [SETUP.md](SETUP.md) for setup and the records required to populate the app.
+In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Restore `talinturo.sql` into a new PostgreSQL database and configure `DATABASE_URL` to use it. The SQL dump includes rows from its source database; inspect it for private data and only run it once against an empty database. See [SETUP.md](SETUP.md) and [DATABASE_CONNECTION_SETUP.md](DATABASE_CONNECTION_SETUP.md) for setup details.
 
 ## Project layout
 
@@ -40,7 +41,7 @@ talinturo/
 │   ├── app.py
 │   ├── requirements.txt
 │   └── test_app.py
-├── talinturo_database.sql
+├── talinturo.sql
 ├── src/
 │   ├── api.js
 │   ├── App.jsx
@@ -54,6 +55,7 @@ talinturo/
 
 ## Documentation
 
+- [Database connection setup](DATABASE_CONNECTION_SETUP.md) - local PostgreSQL, Supabase IPv4/IPv6 options, schema loading, and connection troubleshooting.
 - [Setup and local development](SETUP.md) — prerequisites, install/run steps, demo accounts, tests, and local configuration.
 - [Environment variables](ENVIRONMENT.md) — backend database, session, and Google sign-in configuration.
 - [Development log](DEVELOPMENT_LOG.md) — implementation summary, validation, and follow-up work.

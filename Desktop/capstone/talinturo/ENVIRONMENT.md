@@ -13,7 +13,7 @@ The backend process environment takes precedence over values in `.env`, so deplo
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | Unset | PostgreSQL connection URL. Learning content and progress endpoints require it. |
+| `DATABASE_URL` | Unset | PostgreSQL connection URL, including Supabase PostgreSQL. Learning content and progress endpoints require it. |
 | `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path when `DATABASE_URL` is unset. |
 | `PGHOST` | Driver default | PostgreSQL server host, when not specified in `DATABASE_URL`. |
 | `PGPORT` | Driver default | PostgreSQL server port, when not specified in `DATABASE_URL`. |
@@ -21,7 +21,9 @@ The backend process environment takes precedence over values in `.env`, so deplo
 | `PGUSER` | Driver default | PostgreSQL username, when not specified in `DATABASE_URL`. |
 | `PGPASSWORD` | Unset | Private PostgreSQL password, when not specified in `DATABASE_URL`. |
 
-Set `DATABASE_URL` to enable PostgreSQL. Keep its password out of the URL when possible and use `PGPASSWORD` in `.env`. The schema is in the project-root `talinturo_database.sql`; applying it does not migrate an older schema or populate learning content.
+Set `DATABASE_URL` to enable PostgreSQL. For Supabase, copy the PostgreSQL connection URI from the project's **Connect** dialog and put it in `DATABASE_URL`. Use the database password from Supabase, not the Supabase project URL or anon/service-role API key. The existing Flask backend connects to PostgreSQL with `psycopg`, so no Supabase Python client or `SUPABASE_KEY` is needed. Keep the connection URI private; if the password contains reserved URL characters, URL-encode it.
+
+The schema is in the project-root `talinturo_database.sql`; apply it to the Supabase database using its SQL Editor or `psql`. Applying it does not migrate an older schema or populate additional learning content.
 
 ## Flask and authentication
 

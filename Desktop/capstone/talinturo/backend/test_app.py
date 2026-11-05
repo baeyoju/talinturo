@@ -497,7 +497,6 @@ class TalinturoApiTests(unittest.TestCase):
             "/api/preferences",
             json={
                 "theme_mode": "dark",
-                "reminders": False,
                 "sound": True,
                 "reduced_motion": True,
                 "weekly_summary": True,
@@ -511,7 +510,6 @@ class TalinturoApiTests(unittest.TestCase):
         self.demo_login()
         loaded = self.client.get("/api/preferences").get_json()["preferences"]
         self.assertEqual(loaded["theme_mode"], "dark")
-        self.assertEqual(loaded["reminders"], 0)
 
     def test_preferences_reject_invalid_values(self):
         self.demo_login()
@@ -519,7 +517,6 @@ class TalinturoApiTests(unittest.TestCase):
             "/api/preferences",
             json={
                 "theme_mode": "blue",
-                "reminders": True,
                 "sound": True,
                 "reduced_motion": False,
                 "weekly_summary": False,

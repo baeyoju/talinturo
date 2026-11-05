@@ -3,6 +3,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, usePa
 import { AnimatePresence, domAnimation, LazyMotion, m, useReducedMotion } from "framer-motion";
 import { api, getPendingApiRequests, subscribeToApiLoading } from "./api.js";
 import ConnieLoader from "./ConnieLoader.jsx";
+import AdminWorkspace from "./AdminWorkspace.jsx";
 
 const learnerNav = [
   { heading: "LEARN" },
@@ -25,6 +26,15 @@ const instructorNav = [
   { heading: "YOUR ACCOUNT" },
   { label: "My progress", to: "/progress", icon: "star" },
 ];
+
+const adminNav = [
+  { heading: "ADMINISTRATION" },
+  { label: "Overview", to: "/admin", icon: "home" },
+];
+
+function roleHome(role) {
+  return role === "admin" ? "/admin" : role === "instructor" ? "/instructor" : "/";
+}
 
 const PageMotionContext = createContext(false);
 const introTextVariants = (reduceMotion) => ({
@@ -86,12 +96,10 @@ function App() {
     const saved = localStorage.getItem("talinturo-settings");
     const savedSettings = saved ? JSON.parse(saved) : {};
     return {
-      reminders: true,
       sound: true,
       reducedMotion: false,
       weekly: false,
       themeMode: savedSettings.themeMode === "dark" ? "dark" : "light",
-      ...(typeof savedSettings.reminders === "boolean" ? { reminders: savedSettings.reminders } : {}),
       ...(typeof savedSettings.sound === "boolean" ? { sound: savedSettings.sound } : {}),
       ...(typeof savedSettings.reducedMotion === "boolean" ? { reducedMotion: savedSettings.reducedMotion } : {}),
       ...(typeof savedSettings.weekly === "boolean" ? { weekly: savedSettings.weekly } : {}),
@@ -156,7 +164,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !user.id) {
+    if (!isAuthenticated || !user.id || role === "admin") {
       setCurrentStreak(null);
       return undefined;
     }
@@ -169,7 +177,7 @@ function App() {
         if (active) setCurrentStreak(null);
       });
     return () => { active = false; };
-  }, [isAuthenticated, user.id]);
+  }, [isAuthenticated, user.id, role]);
 
   useEffect(() => {
     if (!isAuthenticated || !user.id) return undefined;
@@ -179,7 +187,6 @@ function App() {
         if (!active) return;
         const savedSettings = {
           themeMode: preferences.theme_mode === "dark" ? "dark" : "light",
-          reminders: Boolean(preferences.reminders),
           sound: Boolean(preferences.sound),
           reducedMotion: Boolean(preferences.reduced_motion),
           weekly: Boolean(preferences.weekly_summary),
@@ -218,8 +225,8 @@ function App() {
     previousPathnameRef.current = location.pathname;
     if (!pathnameChanged || !sidebarOpen) return undefined;
 
-    const timeoutId = window.setTimeout(() => setSidebarOpen(false), 1000);
-    return () => window.clearTimeout(timeoutId);
+    setSidebarOpen(false);
+    return undefined;
   }, [location.pathname, sidebarOpen]);
 
   const changeRole = async (nextRole) => {
@@ -266,7 +273,6 @@ function App() {
         method: "PUT",
         body: JSON.stringify({
           theme_mode: nextSettings.themeMode,
-          reminders: nextSettings.reminders,
           sound: nextSettings.sound,
           reduced_motion: nextSettings.reducedMotion,
           weekly_summary: nextSettings.weekly,
@@ -274,7 +280,6 @@ function App() {
       });
       const savedSettings = {
         themeMode: result.preferences.theme_mode,
-        reminders: Boolean(result.preferences.reminders),
         sound: Boolean(result.preferences.sound),
         reducedMotion: Boolean(result.preferences.reduced_motion),
         weekly: Boolean(result.preferences.weekly_summary),
@@ -310,7 +315,8 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage onNavigate={navigate} onAuth={acceptAuth} onToast={setToast} />} />
           <Route path="/welcome" element={<LandingPage onNavigate={navigate} onAuth={acceptAuth} onToast={setToast} />} />
-          <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { acceptAuth(account); navigate(account.role === "instructor" ? "/instructor" : "/"); }} onToast={setToast} />} />
+          <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { acceptAuth(account); navigate(roleHome(account.role)); }} onToast={setToast} />} />
+          <Route path="/instructor/sign-in" element={<AuthPage mode="login" instructorMode onAuth={(account) => { acceptAuth(account); navigate(roleHome(account.role)); }} onToast={setToast} />} />
           <Route path="/signup" element={<AuthPage mode="signup" onAuth={(account) => { acceptAuth(account); navigate("/profile/setup"); }} onToast={setToast} />} />
           <Route path="/forgot-password" element={<ForgotPassword onToast={setToast} />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -327,11 +333,11 @@ function App() {
       {!onboardingInProgress && <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-profile">
           <div className="avatar avatar-mint">{user.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</div>
-          <div><strong>{user.name}</strong><span>{role === "instructor" ? "Instructor account" : "Learner account"}</span></div>
+          <div><strong>{user.name}</strong><span>{role === "admin" ? "Administrator account" : role === "instructor" ? "Instructor account" : "Learner account"}</span></div>
           <span className="online-dot" />
         </div>
         <nav className="side-nav" aria-label="Main navigation">
-          {(role === "instructor" ? instructorNav : learnerNav).map((item, index) =>
+          {(role === "admin" ? adminNav : role === "instructor" ? instructorNav : learnerNav).map((item, index) =>
             item.heading ? <p className="nav-heading" key={item.heading}>{item.heading}</p> :
               <NavLink key={`${item.to}-${index}`} to={item.to} end={item.to === "/"} className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
                 <span className="nav-icon"><Icon name={item.icon} size={19} /></span><span>{item.label}</span>
@@ -393,7 +399,8 @@ function App() {
               transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
             >
             <Routes>
-            <Route path="/" element={<Dashboard user={user} onNavigate={navigate} />} />
+            <Route path="/" element={role === "admin" ? <Navigate to="/admin" replace /> : <Dashboard user={user} onNavigate={navigate} />} />
+            <Route path="/admin" element={role === "admin" ? <AdminWorkspace user={user} /> : <Navigate to={roleHome(role)} replace />} />
             <Route path="/paths" element={<LearningPaths onNavigate={navigate} />} />
             <Route path="/paths/:pathId" element={<LearningPathDetails onNavigate={navigate} reducedMotion={settings.reducedMotion} />} />
             <Route path="/vocabulary" element={<Vocabulary />} />
@@ -406,9 +413,9 @@ function App() {
             <Route path="/challenge/success" element={<ChallengeFeedback success onNavigate={navigate} />} />
             <Route path="/challenge/try-again" element={<ChallengeFeedback onNavigate={navigate} />} />
             <Route path="/progress" element={<Progress />} />
-            <Route path="/instructor" element={<InstructorDashboard user={user} onNavigate={navigate} />} />
-            <Route path="/learners" element={<LearnerManagement onNavigate={navigate} />} />
-            <Route path="/learners/:id" element={<LearnerDetails />} />
+            <Route path="/instructor" element={role === "instructor" ? <InstructorDashboard user={user} onNavigate={navigate} /> : <Navigate to={roleHome(role)} replace />} />
+            <Route path="/learners" element={role === "instructor" ? <LearnerManagement onNavigate={navigate} /> : <Navigate to={roleHome(role)} replace />} />
+            <Route path="/learners/:id" element={role === "instructor" ? <LearnerDetails /> : <Navigate to={roleHome(role)} replace />} />
             <Route path="/classrooms" element={role === "instructor" ? <Classrooms onNavigate={navigate} /> : <LearnerClassrooms onToast={setToast} />} />
             <Route path="/classrooms/create" element={role === "instructor" ? <CreateClassroom onNavigate={navigate} onToast={setToast} /> : <Navigate to="/classrooms" replace />} />
             <Route path="/classrooms/:id/students" element={role === "instructor" ? <AddStudents onNavigate={navigate} onToast={setToast} demoMode={demoMode} /> : <Navigate to="/classrooms" replace />} />
@@ -424,7 +431,8 @@ function App() {
             }} />} />
             <Route path="/settings" element={<Settings settings={settings} setSettings={setSettings} onSave={savePreferences} onToast={setToast} />} />
             <Route path="/help" element={<Help />} />
-            <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { acceptAuth(account); navigate(account.role === "instructor" ? "/instructor" : "/"); }} onToast={setToast} />} />
+            <Route path="/login" element={<AuthPage mode="login" onAuth={(account) => { acceptAuth(account); navigate(roleHome(account.role)); }} onToast={setToast} />} />
+            <Route path="/instructor/sign-in" element={<Navigate to="/instructor" replace />} />
             <Route path="/signup" element={<AuthPage mode="signup" onAuth={(account) => { acceptAuth(account); navigate("/profile/setup"); }} onToast={setToast} />} />
             <Route path="/profile/setup" element={<ProfileSetup onDone={async (profile) => {
               const result = await api("/profile", {
@@ -458,7 +466,7 @@ function pageTitle(path) {
   if (path.startsWith("/classrooms/create")) return "Create classroom";
   if (/^\/classrooms\/\d+\/students$/.test(path)) return "Add students";
   if (path.startsWith("/challenge/")) return "Challenge results";
-  const found = [...learnerNav, ...instructorNav].find((item) => item.to === path);
+  const found = [...learnerNav, ...instructorNav, ...adminNav].find((item) => item.to === path);
   const titles = { "/activity": "Scenario activity", "/results": "Activity results", "/profile": "My profile", "/settings": "Settings", "/help": "Help & about", "/login": "Welcome", "/welcome": "Welcome", "/signup": "Create account", "/forgot-password": "Reset password", "/reset-password": "Reset password", "/profile/setup": "Set up your profile" };
   return found?.label || titles[path] || "Not found";
 }
@@ -580,6 +588,7 @@ function LandingPage({ onNavigate, onAuth, onToast }) {
           <a className="public-nav-active" aria-current="location" href="#home">Home <span>•</span></a>
           <a href="#about">About</a>
           <a href="#contact">Contact</a>
+          <button type="button" className="public-header-instructor" onClick={() => onNavigate("/instructor/sign-in")}>Instructor sign in</button>
         </nav>
         <a className="landing-button landing-button-yellow" href="#join">Get Started <span aria-hidden="true">↗</span></a>
       </header>
@@ -618,6 +627,7 @@ function LandingPage({ onNavigate, onAuth, onToast }) {
             <div className="join-or"><span>or sign up with</span></div>
             <button className="join-google-button" type="button" disabled={loading || googleLoading} onClick={startGoogleSignup}>{googleLoading ? "Connecting to Google…" : "◎ Sign up with Google"}</button>
             <p className="join-signin">Already learning with us? <button type="button" onClick={() => onNavigate("/login")}>Sign in</button></p>
+            <p className="join-signin join-instructor-link">Teaching with Talinturo? <button type="button" onClick={() => onNavigate("/instructor/sign-in")}>Instructor sign in</button></p>
           </div>
           <div className="join-mascot join-mascot-bird" aria-hidden="true">
             <span className="free-bubble">100% free.<br />For everyone.</span>
@@ -710,16 +720,12 @@ function Dashboard({ user, onNavigate }) {
   const reduceMotion = useContext(PageMotionContext);
   const textVariants = introTextVariants(reduceMotion);
   const [summary, setSummary] = useState(null);
-  const [readiness, setReadiness] = useState(null);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     api("/dashboard")
       .then(setSummary)
       .catch((error) => setLoadError(error.message));
-    api("/data/readiness")
-      .then(setReadiness)
-      .catch((error) => setLoadError((current) => current || error.message));
   }, []);
 
   const firstName = user.name.split(" ")[0];
@@ -792,7 +798,6 @@ function Dashboard({ user, onNavigate }) {
           </div>
         </section>
       </div>
-      {readiness?.missing_data?.length > 0 && <MissingDatabaseData records={readiness.missing_data} />}
       <section className="learner-encouragement"><Icon name="heart" size={22} /><p><strong>Learning looks different for everyone.</strong> Go at your own pace. There's no wrong way to make progress.</p><button onClick={() => onNavigate("/progress")}>View my progress <span>→</span></button></section>
     </div>
   );
@@ -800,11 +805,6 @@ function Dashboard({ user, onNavigate }) {
 
 function StatCard({ icon, tone, label, value, change }) {
   return <div className="stat-card"><span className={`stat-icon ${tone}`}><Icon name={icon} size={21} /></span><div className="stat-copy"><small>{label}</small><strong>{value}</strong><span>{change}</span></div><span className="stat-menu">···</span></div>;
-}
-
-function MissingDatabaseData({ records }) {
-  if (!records?.length) return null;
-  return <section className="panel data-requirements"><p className="eyebrow">DATABASE CONTENT NEEDED</p><h2>What to add in PostgreSQL</h2><ul>{records.map((item, index) => <li key={`${item.table}-${index}`}><code>{item.table}</code> — {item.records}</li>)}</ul></section>;
 }
 
 function PathPreview({ icon, color, title, lessons: count, progress }) {
@@ -1539,7 +1539,7 @@ function CreateClassroom({ onNavigate, onToast }) {
         setSettings(next);
         localStorage.setItem("talinturo-settings", JSON.stringify(next));
       };
-      return <><PageTitle eyebrow="MAKE IT YOUR OWN" title="Settings" description="A few little choices to make learning feel just right for you." /><div className="settings-layout"><section className="panel settings-panel theme-panel"><p className="eyebrow">YOUR LOOK & FEEL</p><h2>Appearance</h2><p className="theme-description">Choose light or dark. Save your preferences to sync this choice across devices.</p><div className="appearance-options" role="group" aria-label="Color theme"><button type="button" className={`appearance-option ${settings.themeMode === "light" ? "appearance-option-active" : ""}`} aria-pressed={settings.themeMode === "light"} onClick={() => updateTheme("light")}><Icon name="sun" size={21} /><span><strong>Light</strong><small>Bright and welcoming</small></span></button><button type="button" className={`appearance-option ${settings.themeMode === "dark" ? "appearance-option-active" : ""}`} aria-pressed={settings.themeMode === "dark"} onClick={() => updateTheme("dark")}><Icon name="moon" size={21} /><span><strong>Dark</strong><small>Easy on the eyes</small></span></button></div></section><section className="panel settings-panel"><p className="eyebrow">YOUR EXPERIENCE</p><h2>Learning preferences</h2><SettingRow title="Gentle practice reminders" text="A friendly nudge to help you keep your learning streak." checked={settings.reminders} onChange={() => toggle("reminders")} /><SettingRow title="Sound effects" text="Play a little sound when you finish an activity." checked={settings.sound} onChange={() => toggle("sound")} /><SettingRow title="Reduce motion" text="Use fewer animations throughout the app." checked={settings.reducedMotion} onChange={() => toggle("reducedMotion")} /></section><section className="panel settings-panel"><p className="eyebrow">KEEP IN THE LOOP</p><h2>Email updates</h2><SettingRow title="Weekly learning summary" text="A quick recap of your progress and little wins." checked={settings.weekly} onChange={() => toggle("weekly")} /><div className="setting-danger"><div><strong>Need a fresh start?</strong><small>Reset your local practice activity. Your account stays safe.</small></div><button onClick={() => onToast("Progress reset is not available in this demo.")}>Reset practice data</button></div></section><div className="settings-footer"><span>Save to your account to sync preferences across devices.</span><button className="button button-outline" onClick={() => onSave(settings)}>Save preferences</button></div></div></>;
+      return <><PageTitle eyebrow="MAKE IT YOUR OWN" title="Settings" description="A few little choices to make learning feel just right for you." /><div className="settings-layout"><section className="panel settings-panel theme-panel"><p className="eyebrow">YOUR LOOK & FEEL</p><h2>Appearance</h2><p className="theme-description">Choose light or dark. Save your preferences to sync this choice across devices.</p><div className="appearance-options" role="group" aria-label="Color theme"><button type="button" className={`appearance-option ${settings.themeMode === "light" ? "appearance-option-active" : ""}`} aria-pressed={settings.themeMode === "light"} onClick={() => updateTheme("light")}><Icon name="sun" size={21} /><span><strong>Light</strong><small>Bright and welcoming</small></span></button><button type="button" className={`appearance-option ${settings.themeMode === "dark" ? "appearance-option-active" : ""}`} aria-pressed={settings.themeMode === "dark"} onClick={() => updateTheme("dark")}><Icon name="moon" size={21} /><span><strong>Dark</strong><small>Easy on the eyes</small></span></button></div></section><section className="panel settings-panel"><p className="eyebrow">YOUR EXPERIENCE</p><h2>Learning preferences</h2><SettingRow title="Sound effects" text="Play a little sound when you finish an activity." checked={settings.sound} onChange={() => toggle("sound")} /><SettingRow title="Reduce motion" text="Use fewer animations throughout the app." checked={settings.reducedMotion} onChange={() => toggle("reducedMotion")} /></section><section className="panel settings-panel"><p className="eyebrow">KEEP IN THE LOOP</p><h2>Email updates</h2><SettingRow title="Weekly learning summary" text="A quick recap of your progress and little wins." checked={settings.weekly} onChange={() => toggle("weekly")} /><div className="setting-danger"><div><strong>Need a fresh start?</strong><small>Reset your local practice activity. Your account stays safe.</small></div><button onClick={() => onToast("Progress reset is not available in this demo.")}>Reset practice data</button></div></section><div className="settings-footer"><span>Save to your account to sync preferences across devices.</span><button className="button button-outline" onClick={() => onSave(settings)}>Save preferences</button></div></div></>;
     }
 
     function SettingRow({ title, text, checked, onChange }) {
@@ -1558,7 +1558,7 @@ function CreateClassroom({ onNavigate, onToast }) {
       return <><PageTitle eyebrow="WE'RE HERE FOR YOU" title="Help & about" description="Questions are part of learning. Find a few answers and helpful notes below." /><section className="help-intro"><span><Icon name="heart" size={24} /></span><div><h2>Learning with respect, always.</h2><p>Talinturo is a small step toward making FSL learning more welcoming and accessible. FSL is a living language, and the Filipino Deaf community is its heart. We encourage learning directly from Deaf signers and educators.</p></div></section><section className="panel faq-panel"><p className="eyebrow">A FEW COMMON QUESTIONS</p><h2>How can we help?</h2>{questions.map(([question, answer], index) => <div className={`faq-item ${open === index ? "faq-open" : ""}`} key={question}><button onClick={() => setOpen(open === index ? -1 : index)} aria-expanded={open === index}><strong>{question}</strong><span>{open === index ? "−" : "+"}</span></button>{open === index && <p>{answer}</p>}</div>)}</section><p className="help-contact">Still have questions? <a href="mailto:hello@talinturo.example">Say hello to our team</a>.</p></>;
     }
 
-    function AuthPage({ mode, onAuth, onToast }) {
+    function AuthPage({ mode, onAuth, onToast, instructorMode = false }) {
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
       const [name, setName] = useState("");
@@ -1568,7 +1568,7 @@ function CreateClassroom({ onNavigate, onToast }) {
         event.preventDefault();
         setLoading(true);
         try {
-          const result = await api(`/auth/${isSignup ? "signup" : "login"}`, { method: "POST", body: JSON.stringify({ email, password, name }) });
+          const result = await api(`/auth/${isSignup ? "signup" : "login"}`, { method: "POST", body: JSON.stringify({ email, password, name, ...(instructorMode ? { expected_role: "instructor" } : {}) }) });
           onAuth(result.user);
         } catch (error) {
           onToast(`Couldn't ${isSignup ? "create your account" : "sign in"}: ${error.message}`);
@@ -1586,7 +1586,7 @@ function CreateClassroom({ onNavigate, onToast }) {
           setLoading(false);
         }
       };
-      return <div className="auth-page"><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name="sparkles" size={24} /></span><p className="eyebrow">{isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={70} autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : "Sign in"} <span>→</span></Button></form><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" disabled={loading} onClick={startGoogleAuth}>{loading ? "Connecting…" : `◎ ${isSignup ? "Sign up with Google" : "Continue with Google"}`}</Button><p className="auth-switch">{isSignup ? "Already learning with us?" : "New to Talinturo?"} <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p><p className="auth-oauth-note">Google securely verifies your email. {isSignup ? "Your account will be created after verification." : "Use the Google account linked to your Talinturo account."}</p></section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="hand" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>Small signs.<br />Big connections.</h2><p>Build a more inclusive world, one kind conversation at a time.</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
+      return <div className={`auth-page ${!isSignup ? "login-auth-page" : ""} ${instructorMode ? "instructor-auth-page" : ""}`}><section className="auth-card panel"><Link to="/" className="auth-brand"><BrandLogo className="brand-logo-auth" /><strong>talinturo</strong></Link><span className="auth-flower"><Icon name={instructorMode ? "school" : "sparkles"} size={24} /></span><p className="eyebrow">{instructorMode ? "INSTRUCTOR PORTAL" : isSignup ? "YOUR FSL JOURNEY STARTS HERE" : "WELCOME BACK"}</p><h1>{instructorMode ? "Welcome back, educator." : isSignup ? "Let's make a little progress." : "It's nice to see you."}</h1><p className="auth-description">{instructorMode ? "Sign in to support your learners, manage classrooms, and keep every lesson moving." : isSignup ? "Create your learning space. Go at your pace, and celebrate every sign." : "Sign in and keep your learning journey going."}</p><form onSubmit={submit}>{isSignup && <label>Your name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={70} autoComplete="name" placeholder="How should we call you?" /></label>}<label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} autoComplete="email" placeholder="you@example.com" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} autoComplete={isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" /></label>{!isSignup && <Link className="forgot-link" to="/forgot-password">Forgot password?</Link>}<Button className="full-button" type="submit" disabled={loading}>{loading ? "One moment…" : isSignup ? "Create my account" : instructorMode ? "Sign in as instructor" : "Sign in"} <span>→</span></Button></form>{!instructorMode && <><div className="auth-divider"><span>or</span></div><Button variant="outline" className="full-button" disabled={loading} onClick={startGoogleAuth}>{loading ? "Connecting…" : `◎ ${isSignup ? "Sign up with Google" : "Continue with Google"}`}</Button></>}<p className="auth-switch">{instructorMode ? <>Learner? <Link to="/login">Sign in here</Link></> : isSignup ? "Already learning with us?" : "New to Talinturo?"} {!instructorMode && <Link to={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link>}</p>{!instructorMode && <p className="auth-oauth-note">Google securely verifies your email. {isSignup ? "Your account will be created after verification." : "Use the Google account linked to your Talinturo account."}</p>}</section><aside className="auth-side"><div className="auth-side-art"><span><Icon name="hand" size={53} /></span><i><Icon name="sparkles" size={19} /></i><b><Icon name="heart" size={24} /></b></div><h2>{instructorMode ? <>Teach with<br />connection.</> : <>Small signs.<br />Big connections.</>}</h2><p>{instructorMode ? "Create a learning space where every learner can move forward with confidence." : "Build a more inclusive world, one kind conversation at a time."}</p><span className="auth-side-caption">MADE FOR LEARNERS, FAMILIES & EDUCATORS</span></aside></div>;
     }
 
     function ForgotPassword({ onToast }) {
