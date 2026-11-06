@@ -12,7 +12,6 @@ __pycache__/
 .pytest_cache/
 
 # Local databases and logs
-*.sqlite3
 *.db
 *.log
 

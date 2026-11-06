@@ -35,7 +35,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The API listens at `http://127.0.0.1:5000`. Without `DATABASE_URL`, it creates a local SQLite database for development and tests. Demo accounts are not created unless `TALINTURO_DEMO_MODE=true`. Learning content and progress APIs require PostgreSQL; SQLite does not provide sample-content fallbacks.
+The API listens at `http://127.0.0.1:5000` and always uses PostgreSQL. Configure a local PostgreSQL server through pgAdmin or another database client before starting Flask.
 
 If PowerShell does not allow activating the virtual environment, you can invoke its Python directly instead:
 
@@ -57,7 +57,7 @@ Open the URL Vite prints, normally `http://127.0.0.1:5173`. Vite forwards reques
 
 ### Connect PostgreSQL
 
-The backend uses PostgreSQL whenever `DATABASE_URL` is set. The project-root `talinturo.sql` dump contains the tables and data currently exported from PostgreSQL.
+The backend always uses PostgreSQL. The project-root `talinturo.sql` dump contains the tables and data currently exported from PostgreSQL.
 
 #### If the database is empty
 
@@ -68,10 +68,10 @@ psql -U postgres -W -d talinturo -v ON_ERROR_STOP=1 -f .\talinturo.sql
 
 Use a new empty database for this dump. It creates tables and inserts exported rows; it is not idempotent and does not migrate an older schema. Back up existing data and plan an explicit migration before using it with an existing Talinturo database. Review inserted rows for private learner data before importing or sharing the dump.
 
-Then edit `.env` in the project root. `DATABASE_URL` selects PostgreSQL; `PG*` values provide connection details and credentials:
+Then edit `.env` in the project root. Leave `DATABASE_URL` blank to use these local server connection details:
 
 ```dotenv
-DATABASE_URL=postgresql://127.0.0.1:5432/talinturo
+DATABASE_URL=
 PGHOST=127.0.0.1
 PGPORT=5432
 PGDATABASE=talinturo
@@ -87,7 +87,7 @@ Replace the sample password and session key with private values. Start Flask fro
 .\backend\.venv\Scripts\python.exe backend\app.py
 ```
 
-If PostgreSQL is remote or uses a different username, host, or port, change those values. The API validates its required tables and columns at startup; `/api/health` checks the active database connection. Account signup/login, Google OAuth, profile, preferences, learning content, and progress all use the database selected by `DATABASE_URL`. SQLite accounts are not automatically copied into PostgreSQL.
+If PostgreSQL is remote or uses a different username, host, or port, change those values. The API validates its required tables and columns at startup; `/api/health` checks the active database connection. Account signup/login, Google OAuth, profile, preferences, learning content, and progress all use this PostgreSQL database. Alternatively, provide a complete PostgreSQL URI in `DATABASE_URL`.
 
 #### If using Supabase
 
@@ -158,16 +158,11 @@ These APIs require authentication. Content creation and publication are currentl
 - `GET /api/classrooms` lists the signed-in learner's active classrooms; `POST /api/classrooms/join` joins one using its invite code.
 - Instructor routes create classrooms, add an existing learner account by email, and manage its roster. Learners can also join directly with the shared classroom code.
 
-The app's `/api/data/readiness` response and dashboard empty state list missing published content. Have FSL vocabulary and instructional material reviewed by Deaf FSL signers and qualified educators before publishing; the interface does not supply authoritative language content. SQLite and PostgreSQL are separate databases, and local SQLite accounts are not copied when switching to PostgreSQL.
+The app's `/api/data/readiness` response and dashboard empty state list missing published content. Have FSL vocabulary and instructional material reviewed by Deaf FSL signers and qualified educators before publishing; the interface does not supply authoritative language content.
 
 ## Demo accounts
 
-Optional local SQLite demo accounts are created only when `TALINTURO_DEMO_MODE=true` is set before the backend starts. They are for local interface testing; they do not supply PostgreSQL learning content.
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Learner | `learner@example.com` | `Talinturo2025!` |
-| Instructor | `teacher@example.com` | `Talinturo2025!` |
+Demo sign-in is disabled by default. Setting `TALINTURO_DEMO_MODE=true` enables role switching for demo accounts that already exist in the configured PostgreSQL database; the app does not create demo accounts automatically.
 
 New accounts created through sign up are stored in the configured database with salted PBKDF2 password hashes. Google sign-in creates or links an account only when Google confirms the email address. Password-reset email delivery is not configured in this development setup.
 
@@ -226,9 +221,9 @@ The API uses these optional environment variables:
 | Variable | Local default | Purpose |
 | --- | --- | --- |
 | `TALINTURO_SECRET_KEY` | Random per process if unset | Flask session signing. Set a stable private value in `.env`. |
-| `DATABASE_URL` | Unset | PostgreSQL connection URL. When set, PostgreSQL is used instead of SQLite. |
-| `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path when `DATABASE_URL` is unset. |
-| `TALINTURO_DEMO_MODE` | `false` | Enables local demo accounts and demo role switching. |
+| `DATABASE_URL` | Unset | Optional PostgreSQL connection URL; when blank, the `PG*` settings are used. |
+| `TALINTURO_TEST_DATABASE_URL` | Unset | Dedicated disposable PostgreSQL database for API tests. Initialize it with `talinturo_schema.sql`; tests truncate its tables. |
+| `TALINTURO_DEMO_MODE` | `false` | Enables demo sign-in for accounts provisioned in PostgreSQL. |
 | `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when serving over HTTPS. |
 | `FLASK_DEBUG` | `false` | Enables Flask debug mode when set to `true`; use only for local development. |
 
@@ -241,4 +236,4 @@ Do not commit secrets. `TALINTURO_DEMO_MODE=false` disables demo role switching.
 - **The app opens but API features fail:** Confirm Flask is running at `127.0.0.1:5000` and that the browser is using the Vite URL.
 - **Port 5173 or 5000 is already in use:** Stop the other local process or configure the development server and proxy to use matching free ports.
 - **Python packages are missing:** Activate the backend virtual environment and run `pip install -r requirements.txt` from the backend directory.
-- **Demo data needs a fresh start:** Stop Flask and remove only `backend/talinturo.sqlite3`, then start Flask again to recreate the seeded local database. This permanently deletes local accounts, classrooms, and progress stored in that database.
+- **API tests need a database:** Create a separate PostgreSQL database with `test` in its name, run the data-free `talinturo_schema.sql` script in it, and set `TALINTURO_TEST_DATABASE_URL`. The test suite truncates that database's tables before each case; never use the application database for this setting.

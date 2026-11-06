@@ -17,7 +17,7 @@ Talinturo is a Filipino Sign Language (FSL) learning app for learners, families,
 - React and JavaScript, with React Router
 - Vite development server and production build
 - Python and Flask, with Flask-CORS
-- PostgreSQL for application content and progress; SQLite is available for authentication tests and optional local demo mode
+- PostgreSQL for all application data, authentication, and automated API test fixtures
 
 The current app **does not** include MediaPipe tracking, a Random Forest classifier, YOLO object detection, or camera-based sign recognition. The camera feature is a local preview only; it does not record or upload video. These recognition technologies are possible future work, not part of the current implementation.
 
@@ -28,10 +28,9 @@ React app (Vite)
       │  /api requests
       ▼
 Flask API ─── PostgreSQL
-         └── SQLite (optional local development/testing)
 ```
 
-In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Restore `talinturo.sql` into a new PostgreSQL database and configure `DATABASE_URL` to use it. The SQL dump includes rows from its source database; inspect it for private data and only run it once against an empty database. See [SETUP.md](SETUP.md) and [DATABASE_CONNECTION_SETUP.md](DATABASE_CONNECTION_SETUP.md) for setup details.
+In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Restore `talinturo.sql` into a new PostgreSQL database and configure `DATABASE_URL` or the `PG*` settings to use it. The SQL dump includes rows from its source database; inspect it for private data and only run it once against an empty database. See [SETUP.md](SETUP.md) and [DATABASE_CONNECTION_SETUP.md](DATABASE_CONNECTION_SETUP.md) for setup details.
 
 ## Project layout
 

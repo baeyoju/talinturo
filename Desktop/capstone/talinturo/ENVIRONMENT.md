@@ -13,24 +13,23 @@ The backend process environment takes precedence over values in `.env`, so deplo
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | Unset | PostgreSQL connection URL, including Supabase PostgreSQL. Learning content and progress endpoints require it. |
-| `TALINTURO_DATABASE` | `backend/talinturo.sqlite3` | SQLite database file path when `DATABASE_URL` is unset. |
+| `DATABASE_URL` | Unset | Optional PostgreSQL connection URL. When blank, `psycopg` uses the `PG*` connection settings below. |
 | `PGHOST` | Driver default | PostgreSQL server host, when not specified in `DATABASE_URL`. |
 | `PGPORT` | Driver default | PostgreSQL server port, when not specified in `DATABASE_URL`. |
 | `PGDATABASE` | Driver default | PostgreSQL database name, when not specified in `DATABASE_URL`. |
 | `PGUSER` | Driver default | PostgreSQL username, when not specified in `DATABASE_URL`. |
 | `PGPASSWORD` | Unset | Private PostgreSQL password, when not specified in `DATABASE_URL`. |
 
-Set `DATABASE_URL` to enable PostgreSQL. For Supabase, copy the PostgreSQL connection URI from the project's **Connect** dialog and put it in `DATABASE_URL`. Use the database password from Supabase, not the Supabase project URL or anon/service-role API key. The existing Flask backend connects to PostgreSQL with `psycopg`, so no Supabase Python client or `SUPABASE_KEY` is needed. Keep the connection URI private; if the password contains reserved URL characters, URL-encode it.
+The backend always connects to PostgreSQL. For a local server, configure `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD` in `.env`; pgAdmin is the client you use to inspect and manage that server. Alternatively, set `DATABASE_URL` to a PostgreSQL URI. For Supabase, copy the URI from the project's **Connect** dialog. Keep credentials private and URL-encode reserved characters in a URI password.
 
-The schema is in the project-root `talinturo_database.sql`; apply it to the Supabase database using its SQL Editor or `psql`. Applying it does not migrate an older schema or populate additional learning content.
+The schema is in the project-root `talinturo.sql`; apply it to the intended PostgreSQL database using pgAdmin's Query Tool, Supabase SQL Editor, or `psql`. Applying it does not migrate an older schema or populate additional learning content.
 
 ## Flask and authentication
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TALINTURO_SECRET_KEY` | Random per process if unset | Private Flask session signing key. Set a stable value in `.env` so sessions survive backend restarts. |
-| `TALINTURO_DEMO_MODE` | `false` | Enables optional local demo accounts and role switching. |
+| `TALINTURO_DEMO_MODE` | `false` | Enables demo sign-in for demo accounts provisioned in PostgreSQL. |
 | `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when the backend is served over HTTPS. |
 | `FLASK_DEBUG` | `false` | Enables Flask debug mode. Use only for local development. |
 
@@ -55,7 +54,7 @@ Google sign-in is unavailable unless both OAuth credentials are set in `.env`. R
 
 - Never commit `.env`, passwords, OAuth secrets, database credentials, or session keys.
 - `.env.example` contains configuration names and safe defaults only. Put real values in `.env`.
-- `DATABASE_URL` selects PostgreSQL; it does not migrate data from SQLite or generate sample content.
+- Automated API tests require a separate PostgreSQL database configured as `TALINTURO_TEST_DATABASE_URL`; they clear that database's tables before each test. Initialize it with the data-free `talinturo_schema.sql` script.
 - Before public deployment, disable demo mode, set a private stable session key, use HTTPS and secure cookies, and configure production access controls.
 - The Google OAuth client secret was previously embedded in source code. Treat it as exposed: rotate it in Google Cloud Console and place the replacement only in `.env`.
 

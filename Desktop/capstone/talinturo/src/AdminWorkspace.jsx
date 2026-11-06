@@ -20,12 +20,15 @@ export default function AdminWorkspace({ user }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingLessonId, setEditingLessonId] = useState(null);
   const [account, setAccount] = useState({ name: "", email: "", password: "", role: "learner" });
   const [pathForm, setPathForm] = useState({ title: "", description: "", level: "Beginner" });
   const [lessonForm, setLessonForm] = useState({
-    path_id: "", title: "", description: "", duration_minutes: 5,
+    path_id: "", title: "", description: "", duration_minutes: "5:00",
+    image_url: "", video_url: "", captions_url: "", transcript: "",
     content: '{\n  "sections": [\n    { "title": "Introduction", "body": "Add your lesson material here." }\n  ]\n}',
   });
+  const [lessonMediaForm, setLessonMediaForm] = useState({ image_url: "", video_url: "", captions_url: "", transcript: "" });
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -90,9 +93,10 @@ export default function AdminWorkspace({ user }) {
     try { content = JSON.parse(lessonForm.content); }
     catch { setError("Lesson material must be valid JSON."); return; }
     await save(async () => {
+      const { captions_url, transcript, ...lessonFields } = lessonForm;
       await api(`/admin/paths/${lessonForm.path_id}/lessons`, {
         method: "POST",
-        body: JSON.stringify({ ...lessonForm, duration_minutes: Number(lessonForm.duration_minutes), content }),
+        body: JSON.stringify({ ...lessonFields, captions_url, transcript, duration_minutes: lessonForm.duration_minutes, content }),
       });
       setLessonForm((current) => ({ ...current, title: "", description: "" }));
     }, "Lesson saved as a draft.");
@@ -112,6 +116,24 @@ export default function AdminWorkspace({ user }) {
     () => api(`/admin/lessons/${lesson.id}`, { method: "PATCH", body: JSON.stringify({ is_published: !lesson.is_published }) }),
     `“${lesson.title}” is now ${lesson.is_published ? "a draft" : "published"}.`,
   );
+
+  const editLessonMedia = (lesson) => {
+    setEditingLessonId(lesson.id);
+    setLessonMediaForm({
+      image_url: lesson.image_url || "",
+      video_url: lesson.video_url || "",
+      captions_url: lesson.content?.captions_url || "",
+      transcript: lesson.content?.transcript || "",
+    });
+  };
+
+  const updateLessonMedia = async (event, lesson) => {
+    event.preventDefault();
+    await save(async () => {
+      await api(`/admin/lessons/${lesson.id}`, { method: "PATCH", body: JSON.stringify(lessonMediaForm) });
+      setEditingLessonId(null);
+    }, `Media saved for “${lesson.title}”.`);
+  };
 
   return <div className="admin-workspace">
     <section className="admin-hero">
@@ -154,13 +176,13 @@ export default function AdminWorkspace({ user }) {
           <section className="admin-panel admin-form-panel"><p className="eyebrow">PATH DESIGN</p><h2>Create a learning path</h2><p className="admin-panel-intro">Paths start as drafts. Publish when the path and its lessons are ready for learners.</p>
             <form className="admin-form" onSubmit={createPath}><label>Path title<input required maxLength={200} value={pathForm.title} onChange={(event) => setPathForm({ ...pathForm, title: event.target.value })} placeholder="Everyday greetings" /></label><label>Level<select value={pathForm.level} onChange={(event) => setPathForm({ ...pathForm, level: event.target.value })}><option>Beginner</option><option>Elementary</option><option>Intermediate</option><option>Advanced</option><option>All levels</option></select></label><label>Description<textarea rows="3" value={pathForm.description} onChange={(event) => setPathForm({ ...pathForm, description: event.target.value })} placeholder="What will learners practice?" /></label><button className="button button-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save path draft"} <span>→</span></button></form>
           </section>
-          <section className="admin-panel admin-form-panel"><p className="eyebrow">LESSON DESIGN</p><h2>Add a lesson</h2><p className="admin-panel-intro">Lesson material uses a sections array with a title and body for each section.</p>
-            <form className="admin-form" onSubmit={createLesson}><label>Learning path<select required value={lessonForm.path_id} onChange={(event) => setLessonForm({ ...lessonForm, path_id: event.target.value })}><option value="">Choose a path</option>{paths.map((path) => <option key={path.id} value={path.id}>{path.title}</option>)}</select></label><label>Lesson title<input required maxLength={200} value={lessonForm.title} onChange={(event) => setLessonForm({ ...lessonForm, title: event.target.value })} placeholder="Introduce yourself" /></label><label>Description<textarea rows="2" value={lessonForm.description} onChange={(event) => setLessonForm({ ...lessonForm, description: event.target.value })} placeholder="A short learner-facing description" /></label><label>Duration in minutes<input type="number" min="0" max="600" value={lessonForm.duration_minutes} onChange={(event) => setLessonForm({ ...lessonForm, duration_minutes: event.target.value })} /></label><label>Lesson material (JSON)<textarea className="admin-code-input" rows="7" value={lessonForm.content} onChange={(event) => setLessonForm({ ...lessonForm, content: event.target.value })} spellCheck="false" /></label><button className="button button-primary" type="submit" disabled={saving || !paths.length}>{saving ? "Saving…" : "Save lesson draft"} <span>→</span></button></form>
+          <section className="admin-panel admin-form-panel"><p className="eyebrow">LESSON DESIGN</p><h2>Add a lesson</h2><p className="admin-panel-intro">Add lesson media and accessibility materials here. Lesson notes can be added as a sections array with a title and body.</p>
+            <form className="admin-form" onSubmit={createLesson}><label>Learning path<select required value={lessonForm.path_id} onChange={(event) => setLessonForm({ ...lessonForm, path_id: event.target.value })}><option value="">Choose a path</option>{paths.map((path) => <option key={path.id} value={path.id}>{path.title}</option>)}</select></label><label>Lesson title<input required maxLength={200} value={lessonForm.title} onChange={(event) => setLessonForm({ ...lessonForm, title: event.target.value })} placeholder="Introduce yourself" /></label><label>Description<textarea rows="2" value={lessonForm.description} onChange={(event) => setLessonForm({ ...lessonForm, description: event.target.value })} placeholder="A short learner-facing description" /></label><label>Duration (M:SS)<input required type="text" inputMode="numeric" pattern="[0-9]+:[0-5][0-9]" title="Enter minutes and seconds, such as 3:36" value={lessonForm.duration_minutes} onChange={(event) => setLessonForm({ ...lessonForm, duration_minutes: event.target.value })} placeholder="3:36" /></label><label>Lesson image URL<input type="url" value={lessonForm.image_url} onChange={(event) => setLessonForm({ ...lessonForm, image_url: event.target.value })} placeholder="https://..." /></label><label>Lesson video URL<input type="url" value={lessonForm.video_url} onChange={(event) => setLessonForm({ ...lessonForm, video_url: event.target.value })} placeholder="https://..." /></label><label>Subtitles file URL (.vtt)<input type="url" value={lessonForm.captions_url} onChange={(event) => setLessonForm({ ...lessonForm, captions_url: event.target.value })} placeholder="https://.../captions.vtt" /></label><label>Transcript<textarea rows="4" value={lessonForm.transcript} onChange={(event) => setLessonForm({ ...lessonForm, transcript: event.target.value })} placeholder="Lesson transcript for learners" /></label><label>Lesson material (JSON)<textarea className="admin-code-input" rows="7" value={lessonForm.content} onChange={(event) => setLessonForm({ ...lessonForm, content: event.target.value })} spellCheck="false" /></label><button className="button button-primary" type="submit" disabled={saving || !paths.length}>{saving ? "Saving…" : "Save lesson draft"} <span>→</span></button></form>
           </section>
         </div>
         <section className="admin-panel admin-content-list"><div className="admin-panel-heading"><div><p className="eyebrow">EDITORIAL LIBRARY</p><h2>Paths and lessons</h2></div><span className="admin-quiet-label">Drafts are private to the admin workspace</span></div>
           {paths.length ? paths.map((path) => <article className="admin-path-card" key={path.id}><div className="admin-path-heading"><div><span className="admin-path-level">{path.level || "Learning path"}</span><h3>{path.title}</h3><p>{path.description || "No description added yet."}</p><small>{lessonsByPath[path.id]?.length || 0} lesson(s) · <code>{path.slug}</code></small></div><div className="admin-path-actions"><span className={`admin-status ${path.is_published ? "published" : "draft"}`}>{path.is_published ? "Published" : "Draft"}</span><button className={`admin-publish-button ${path.is_published ? "is-published" : ""}`} disabled={saving} onClick={() => togglePath(path)}>{path.is_published ? "Unpublish" : "Publish path"}</button></div></div>
-            {(lessonsByPath[path.id] || []).map((lesson) => <div className="admin-lesson-row" key={lesson.id}><span className="admin-lesson-mark">↳</span><div className="admin-row-copy"><strong>{lesson.title}</strong><small>{lesson.duration_minutes || 0} min · {lesson.content?.sections?.length || 0} sections · <code>{lesson.slug}</code></small></div><span className={`admin-status ${lesson.is_published ? "published" : "draft"}`}>{lesson.is_published ? "Published" : "Draft"}</span><button className="admin-small-button" disabled={saving || (!lesson.is_published && !path.is_published)} title={!path.is_published && !lesson.is_published ? "Publish the path first" : ""} onClick={() => toggleLesson(lesson)}>{lesson.is_published ? "Unpublish" : "Publish"}</button></div>)}
+            {(lessonsByPath[path.id] || []).map((lesson) => <div className="admin-lesson-entry" key={lesson.id}><div className="admin-lesson-row"><span className="admin-lesson-mark">↳</span><div className="admin-row-copy"><strong>{lesson.title}</strong><small>{lesson.duration_minutes || "0:00"} · {lesson.content?.sections?.length || 0} sections · <code>{lesson.slug}</code></small></div><span className={`admin-status ${lesson.is_published ? "published" : "draft"}`}>{lesson.is_published ? "Published" : "Draft"}</span><button className="admin-small-button" onClick={() => editingLessonId === lesson.id ? setEditingLessonId(null) : editLessonMedia(lesson)}>{editingLessonId === lesson.id ? "Close editor" : "Edit media"}</button><button className="admin-small-button" disabled={saving || (!lesson.is_published && !path.is_published)} title={!path.is_published && !lesson.is_published ? "Publish the path first" : ""} onClick={() => toggleLesson(lesson)}>{lesson.is_published ? "Unpublish" : "Publish"}</button></div>{editingLessonId === lesson.id && <form className="admin-form admin-media-editor" onSubmit={(event) => updateLessonMedia(event, lesson)}><label>Lesson image URL<input type="url" value={lessonMediaForm.image_url} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, image_url: event.target.value })} placeholder="https://..." /></label><label>Lesson video URL<input type="url" value={lessonMediaForm.video_url} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, video_url: event.target.value })} placeholder="https://..." /></label><label>Subtitles file URL (.vtt)<input type="url" value={lessonMediaForm.captions_url} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, captions_url: event.target.value })} placeholder="https://.../captions.vtt" /></label><label>Transcript<textarea rows="4" value={lessonMediaForm.transcript} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, transcript: event.target.value })} placeholder="Lesson transcript for learners" /></label><button className="button button-primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save media"}</button></form>}</div>)}
             {!lessonsByPath[path.id]?.length && <p className="admin-empty admin-path-empty">No lessons yet. Add one using the lesson form above.</p>}
           </article>) : <p className="admin-empty">No paths yet. Create the first one above.</p>}
         </section>

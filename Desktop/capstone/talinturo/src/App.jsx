@@ -402,6 +402,7 @@ function App() {
             <Route path="/" element={role === "admin" ? <Navigate to="/admin" replace /> : <Dashboard user={user} onNavigate={navigate} />} />
             <Route path="/admin" element={role === "admin" ? <AdminWorkspace user={user} /> : <Navigate to={roleHome(role)} replace />} />
             <Route path="/paths" element={<LearningPaths onNavigate={navigate} />} />
+            <Route path="/paths/:pathId/lessons/:lessonId" element={<LessonViewer onNavigate={navigate} />} />
             <Route path="/paths/:pathId" element={<LearningPathDetails onNavigate={navigate} reducedMotion={settings.reducedMotion} />} />
             <Route path="/vocabulary" element={<Vocabulary />} />
             <Route path="/practice" element={<Practice onToast={setToast} />} />
@@ -778,7 +779,7 @@ function Dashboard({ user, onNavigate }) {
                 <div className="next-lesson-progress"><ProgressBar value={summary.next_lesson.progress} color="blue" /><span>{summary.next_lesson.progress}%</span></div>
               </div>
             </div>
-            <div className="next-lesson-footer"><span>{summary.next_lesson.duration_minutes ? `About ${summary.next_lesson.duration_minutes} minutes` : "Continue at your own pace"}</span><Button onClick={() => onNavigate(`/paths/${summary.next_lesson.path_id}`)}>Continue <span>→</span></Button></div>
+            <div className="next-lesson-footer"><span>{summary.next_lesson.duration_minutes ? `About ${summary.next_lesson.duration_minutes}` : "Continue at your own pace"}</span><Button onClick={() => onNavigate(`/paths/${summary.next_lesson.path_id}`)}>Continue <span>→</span></Button></div>
           </> : <div className="empty-state"><Icon name="bookOpen" size={30} /><h3>No lesson is ready yet</h3><p>Publish a lesson in the PostgreSQL <code>lessons</code> table and connect it to a published learning path.</p></div>}
         </section>
 
@@ -855,23 +856,103 @@ function DatabaseHelpNotice({ error }) {
 
 function LessonMedia({ lesson }) {
   const [imageUnavailable, setImageUnavailable] = useState(false);
-  const [videoUnavailable, setVideoUnavailable] = useState(false);
   const imageUrl = typeof lesson.image_url === "string" ? lesson.image_url.trim() : "";
-  const videoUrl = typeof lesson.video_url === "string" ? lesson.video_url.trim() : "";
 
   return <div className="lesson-media">
     {imageUrl && !imageUnavailable
       ? <img className="lesson-media-image" src={imageUrl} alt={`${lesson.title} lesson`} loading="lazy" onError={() => setImageUnavailable(true)} />
-      : <div className="lesson-media-placeholder"><Icon name="bookOpen" size={32} /><span>{imageUrl ? "Lesson image unavailable" : "Add an image_url for this lesson"}</span></div>}
-    {videoUrl && <details className="lesson-demo">
-      <summary><Icon name="camera" size={17} /> Watch the sign demonstration</summary>
-      {videoUnavailable
-        ? <p className="lesson-video-error">This video could not be played here. <a href={videoUrl} target="_blank" rel="noreferrer">Open the video in a new tab</a>.</p>
-        : <video controls playsInline preload="metadata" poster={imageUrl || undefined} onError={() => setVideoUnavailable(true)}>
-          <source src={videoUrl} />
-          Your browser does not support embedded video. <a href={videoUrl} target="_blank" rel="noreferrer">Open the video</a>.
-        </video>}
-    </details>}
+      : <div className="lesson-media-placeholder"><Icon name="bookOpen" size={32} /><span>{imageUrl ? "Lesson image unavailable" : "No image available"}</span></div>}
+  </div>;
+}
+
+function LessonViewer({ onNavigate }) {
+  const { pathId, lessonId } = useParams();
+  const [lesson, setLesson] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [subtitlesOn, setSubtitlesOn] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    setLesson(null);
+    setError("");
+    setLoading(true);
+    setSubtitlesOn(false);
+    api(`/lessons/${lessonId}`)
+      .then((result) => {
+        if (!active) return;
+        setLesson(result.lesson);
+        setCompleted(result.lesson.progress >= 100);
+      })
+      .catch((loadError) => { if (active) setError(loadError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [lessonId]);
+
+  const toggleSubtitles = () => {
+    const tracks = videoRef.current?.textTracks;
+    if (!tracks?.length) return;
+    const enabled = !subtitlesOn;
+    for (let index = 0; index < tracks.length; index += 1) tracks[index].mode = enabled ? "showing" : "disabled";
+    setSubtitlesOn(enabled);
+  };
+
+  const finishLesson = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await api(`/lessons/${lessonId}/complete`, { method: "POST" });
+      setCompleted(true);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading lesson...</div>;
+  if (error && !lesson) return <><PageTitle eyebrow="LEARNING PATH" title="Lesson unavailable" /><p className="inline-error">{error}</p><Button variant="outline" onClick={() => onNavigate(`/paths/${pathId}`)}>Back to learning path</Button></>;
+  if (!lesson) return null;
+  const transcript = lesson.content?.transcript;
+  const captionsUrl = lesson.content?.captions_url;
+  const sections = Array.isArray(lesson.content?.sections) ? lesson.content.sections : [];
+  const hasMaterial = Boolean(lesson.video_url || sections.length);
+
+  return <div className="lesson-viewer">
+    <PageTitle eyebrow={`${lesson.path_title} · ${lesson.duration_minutes || "0:00"}`} title={lesson.title} description={lesson.description} action={<Button variant="outline" onClick={() => onNavigate(`/paths/${pathId}`)}>Back to path</Button>} />
+    {error && <p className="inline-error" role="alert">{error}</p>}
+    <section className="lesson-player-card panel" aria-label="Lesson video">
+      {lesson.video_url
+        ? <video ref={videoRef} className="lesson-player" controls playsInline preload="metadata" poster={lesson.image_url || undefined}>
+          <source src={lesson.video_url} />
+          {captionsUrl && <track kind="captions" src={captionsUrl} srcLang="en" label="English subtitles" default={false} />}
+          Your browser does not support embedded video.
+        </video>
+        : <div className="lesson-player-empty"><Icon name="camera" size={32} /><span>Video is not available for this lesson yet.</span></div>}
+      <div className="lesson-player-controls">
+        <span><Icon name="bookOpen" size={16} /> Lesson video</span>
+        <button type="button" className="button button-outline" onClick={toggleSubtitles} disabled={!captionsUrl || !lesson.video_url} aria-pressed={subtitlesOn}>
+          {subtitlesOn ? "Subtitles on" : "Subtitles"}
+        </button>
+      </div>
+      {!captionsUrl && <p className="lesson-caption-note">Subtitles are not available for this lesson yet.</p>}
+    </section>
+
+    <section className="lesson-transcript panel">
+      <div className="lesson-transcript-heading"><span className="eyebrow">LESSON NOTES</span><h2>Transcript</h2></div>
+      {typeof transcript === "string" && transcript.trim()
+        ? <p className="lesson-transcript-copy">{transcript}</p>
+        : <p className="lesson-caption-note">Transcript is not available for this lesson yet.</p>}
+      {sections.map((section, index) => <article className="lesson-transcript-section" key={section.id || index}><h3>{section.title}</h3><p>{section.body}</p></article>)}
+    </section>
+    <div className="lesson-viewer-actions">
+      {completed
+        ? <Button onClick={() => onNavigate(`/paths/${pathId}`)}>Lesson complete · Back to path</Button>
+        : <Button disabled={saving || !hasMaterial} onClick={finishLesson}>{saving ? "Saving..." : "Finish lesson"}</Button>}
+    </div>
   </div>;
 }
 
@@ -883,7 +964,6 @@ function LearningPathDetails({ onNavigate, reducedMotion }) {
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [savingLessonId, setSavingLessonId] = useState(null);
   useEffect(() => {
     let active = true;
     setPath(null);
@@ -900,18 +980,6 @@ function LearningPathDetails({ onNavigate, reducedMotion }) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [pathId]);
-  const completeLesson = async (lessonId) => {
-    setSavingLessonId(lessonId);
-    setSaveError("");
-    try {
-      await api(`/lessons/${lessonId}/complete`, { method: "POST" });
-      setLessons((current) => current.map((lesson) => lesson.id === lessonId ? { ...lesson, progress: 100 } : lesson));
-    } catch (error) {
-      setSaveError(error.message);
-    } finally {
-      setSavingLessonId(null);
-    }
-  };
   if (loadError) return <><PageTitle eyebrow="LEARNING PATH" title="Path unavailable" /><DatabaseHelpNotice error={loadError} /><Button variant="outline" onClick={() => onNavigate("/paths")}>← All learning paths</Button></>;
   if (loading || !path) return <div className="empty-state">Loading learning path…</div>;
   const completedLessons = lessons.filter((lesson) => lesson.progress >= 100).length;
@@ -938,6 +1006,7 @@ function LearningPathDetails({ onNavigate, reducedMotion }) {
       {lessons.map((lesson, index) => {
         const sections = Array.isArray(lesson.content?.sections) ? lesson.content.sections : [];
         const hasSections = sections.length > 0;
+        const hasMaterial = hasSections || Boolean(lesson.video_url);
         const completed = lesson.progress >= 100;
         const current = !completed && lessons.slice(0, index).every((previous) => previous.progress >= 100);
         const locked = !completed && !current;
@@ -986,20 +1055,19 @@ function LearningPathDetails({ onNavigate, reducedMotion }) {
               <span className={`lesson-status-label lesson-status-${status}`}>
                 {completed ? "Completed" : current ? "Current lesson" : "Locked"}
               </span>
-              <span className="lesson-duration">{lesson.duration_minutes ? `${lesson.duration_minutes} min` : "Lesson"}</span>
+              <span className="lesson-duration">{lesson.duration_minutes || "Lesson"}</span>
             </div>
             <h2>{lesson.title}</h2>
             {lesson.content?.description && <p>{lesson.content.description}</p>}
             <LessonMedia lesson={lesson} />
             <div className="path-card-progress"><ProgressBar value={lesson.progress} /><span>{lesson.progress}% complete</span></div>
             {locked && <p className="lesson-lock-note"><Icon name="lock" size={15} /> Complete the previous lesson to unlock this one.</p>}
-            {hasSections ? sections.map((section, sectionIndex) => <div className="insight-row" key={section.id || sectionIndex}><div><strong>{section.title}</strong><small>{section.body}</small></div></div>) : <p>Lesson material is not available yet. Add a lesson <code>content</code> JSON object to the PostgreSQL <code>lessons</code> table.</p>}
             <Button
-              variant={completed || locked ? "outline" : "primary"}
-              disabled={completed || locked || savingLessonId === lesson.id || !hasSections}
-              onClick={() => completeLesson(lesson.id)}
+              variant={locked ? "outline" : "primary"}
+              disabled={locked || !hasMaterial}
+              onClick={() => onNavigate(`/paths/${pathId}/lessons/${lesson.id}`)}
             >
-              {completed ? "Lesson completed" : locked ? "Locked" : savingLessonId === lesson.id ? "Saving…" : hasSections ? "Mark lesson complete" : "Lesson content needed"}
+              {locked ? "Locked" : hasMaterial ? "Continue" : "Lesson content needed"}
             </Button>
           </div>
         </m.article>;

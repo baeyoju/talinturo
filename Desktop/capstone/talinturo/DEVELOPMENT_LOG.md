@@ -1,5 +1,27 @@
 # Talinturo Development Log
 
+## November 6, 2026 — Lesson player and duration format
+
+### Learner lesson experience
+
+- Added a dedicated lesson page with video playback, a subtitles toggle, transcript display, lesson notes, and a finish action.
+- Changed learning-path lesson actions to **Continue** and replaced learner-facing image URL setup instructions with a missing-image placeholder.
+- Added admin-only fields for lesson images, video, subtitles, and transcripts, including editing media on existing lessons.
+- Allowed video-only lessons to be completed.
+
+### Lesson duration
+
+- Changed `lessons.duration_minutes` from integer minutes to text in `M:SS` format, such as `3:36`, in both PostgreSQL schema files.
+- Added `migrations/002_lesson_duration_mmss.sql` to convert existing integer values to `N:00` and enforce the new format. A matching SQL query was provided for running in pgAdmin.
+- Updated lesson creation validation and admin and learner displays to use `M:SS` values. Backend startup now reports when the existing database still needs the migration.
+
+### Validation
+
+- Python syntax compilation — passed.
+- `npm.cmd run build` — passed.
+- The PostgreSQL migration was not run against a live database; apply it in pgAdmin before starting the app against the existing integer column.
+- Automated tests were not run.
+
 ## November 5, 2026 — Database connection setup guide
 
 ### PostgreSQL connection documentation

@@ -20,10 +20,15 @@ Supabase direct connections use IPv6 by default. If direct hostname resolution o
 2. In DBeaver or pgAdmin, connect to the local server at `127.0.0.1`, usually on port `5432`.
 3. Create a **new, empty** database named `talinturo` (or choose another name and use it consistently below).
 4. Open the project-root `talinturo.sql` in the SQL editor for that database and execute the complete script. In DBeaver, use **SQL Editor → Open SQL Script** and execute the script. In pgAdmin, open the database's **Query Tool**, load the file, and execute it.
-5. In the project-root `.env`, set `DATABASE_URL` to the local server, database, username, and password. For example:
+5. In the project-root `.env`, set the local PostgreSQL connection values. For example:
 
    ```dotenv
-   DATABASE_URL=postgresql://postgres:URL_ENCODED_PASSWORD@127.0.0.1:5432/talinturo
+   DATABASE_URL=
+   PGHOST=127.0.0.1
+   PGPORT=5432
+   PGDATABASE=talinturo
+   PGUSER=postgres
+   PGPASSWORD=your-local-database-password
    ```
 
    Replace the example username/password with the credentials configured on your local PostgreSQL server. URL-encode reserved characters in the password. If the password includes `@`, `:`, `/`, `#`, `?`, or `%`, encode those characters before placing it in the URI.
@@ -47,10 +52,10 @@ The Flask backend connects to Supabase as PostgreSQL. It does not need a Supabas
 
 ## Which `.env` setting the backend uses
 
-- `DATABASE_URL` selects PostgreSQL. When it is set, the backend connects using this complete URI.
-- The optional `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD` values are fallback libpq connection settings; they do not replace fields in a complete `DATABASE_URL`.
-- `TALINTURO_DATABASE` is only the SQLite file path used when `DATABASE_URL` is empty.
+- The backend always uses PostgreSQL. Set `DATABASE_URL` to a complete URI or leave it blank and configure `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`.
 - The backend loads the project-root `.env` from `backend/app.py`. Existing process-level environment variables take precedence over values in `.env`; restart Flask after changing either source.
+
+Automated API tests require a separate, disposable PostgreSQL database whose name contains `test`. Set `TALINTURO_TEST_DATABASE_URL` to that database after running the data-free `talinturo_schema.sql` script in it. Tests truncate its application tables before each case; never point this setting at the database containing your application data.
 
 Do not commit `.env`, paste a connection URI into chat, or share a screenshot that exposes its password. If the connection still fails, diagnose in this order:
 

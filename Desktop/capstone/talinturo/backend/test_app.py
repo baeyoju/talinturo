@@ -1,39 +1,76 @@
-import sqlite3
+import os
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
+from dotenv import dotenv_values
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+TEST_DATABASE_URL = os.environ.get(
+    "TALINTURO_TEST_DATABASE_URL",
+    dotenv_values(ROOT_DIR / ".env").get("TALINTURO_TEST_DATABASE_URL", ""),
+).strip()
+if not TEST_DATABASE_URL:
+    raise RuntimeError(
+        "Set TALINTURO_TEST_DATABASE_URL to a dedicated PostgreSQL test database before running the API tests."
+    )
+test_database_name = urlsplit(TEST_DATABASE_URL).path.rsplit("/", 1)[-1].split("?", 1)[0]
+if "test" not in test_database_name.lower():
+    raise RuntimeError("TALINTURO_TEST_DATABASE_URL must point to a database with 'test' in its name.")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import app as backend
 
 
 class TalinturoApiTests(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        backend.DATABASE = Path(self.temp_dir.name) / "test.sqlite3"
-        self.previous_demo_mode = backend.DEMO_MODE
+        backend.DATABASE_URL = TEST_DATABASE_URL
         backend.DEMO_MODE = True
         backend.initialize_database()
+        with backend.app.app_context():
+            db = backend.get_db()
+            db.execute(
+                "TRUNCATE TABLE achievements, activities, activity_attempts, "
+                "classroom_memberships, classrooms, learning_paths, lesson_progress, "
+                "lessons, oauth_accounts, sign_favorites, signs, user_achievements, "
+                "user_preferences, users RESTART IDENTITY CASCADE"
+            )
+            for name, email, role in (
+                ("Jamie Santos", "teacher@example.com", "instructor"),
+                ("Alex Rivera", "learner@example.com", "learner"),
+            ):
+                salt, password_hash = backend.hash_password("safe-password")
+                backend.insert_id(
+                    db,
+                    "INSERT INTO users(name, email, password_salt, password_hash, role) "
+                    "VALUES(?, ?, ?, ?, ?)",
+                    (name, email, salt, password_hash, role),
+                    backend.USER_PK,
+                )
+            instructor_id = db.execute(
+                "SELECT user_id FROM users WHERE email = ?", ("teacher@example.com",)
+            ).fetchone()["user_id"]
+            backend.insert_id(
+                db,
+                "INSERT INTO classrooms(instructor_id, name, description, invite_code) "
+                "VALUES(?, ?, ?, ?)",
+                (instructor_id, "Sunshine Sign Stars", "A test classroom", "SUNNY24"),
+                backend.CLASSROOM_PK,
+            )
+            db.commit()
         backend.app.config["TESTING"] = True
         self.client = backend.app.test_client()
-
-    def tearDown(self):
-        backend.DEMO_MODE = self.previous_demo_mode
-        self.temp_dir.cleanup()
 
     def demo_login(self, role="learner"):
         return self.client.post("/api/auth/demo", json={"role": role})
 
     def test_database_initialization_does_not_seed_sample_accounts_by_default(self):
-        backend.DEMO_MODE = False
-        backend.DATABASE = Path(self.temp_dir.name) / "empty.sqlite3"
-        backend.initialize_database()
         with backend.app.app_context():
-            user_count = backend.get_db().execute(
-                "SELECT COUNT(*) AS total FROM users"
-            ).fetchone()["total"]
+            db = backend.get_db()
+            db.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE")
+            backend.initialize_database()
+            user_count = db.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
         self.assertEqual(user_count, 0)
         self.assertEqual(self.demo_login().status_code, 404)
 
@@ -83,9 +120,8 @@ class TalinturoApiTests(unittest.TestCase):
         )
         self.assertEqual(invalid_login.status_code, 401)
 
-    def test_password_values_match_text_columns_in_all_databases(self):
-        with patch.object(backend, "USE_POSTGRES", True):
-            salt, password_hash = backend.stored_password_values("00ff", "abcd")
+    def test_password_values_match_postgres_text_columns(self):
+        salt, password_hash = backend.stored_password_values("00ff", "abcd")
         self.assertEqual(salt, "00ff")
         self.assertEqual(password_hash, "abcd")
 
@@ -270,7 +306,7 @@ class TalinturoApiTests(unittest.TestCase):
             "/api/progress/complete",
             json={"activity_id": 1, "response": {"answers": []}},
         )
-        self.assertEqual(unavailable.status_code, 503)
+        self.assertEqual(unavailable.status_code, 404)
 
     def test_lesson_progress_requires_login_and_valid_in_progress_percentage(self):
         response = self.client.put(
@@ -292,71 +328,50 @@ class TalinturoApiTests(unittest.TestCase):
             "/api/lessons/1/progress",
             json={"progress_percent": 25},
         )
-        self.assertEqual(unavailable.status_code, 503)
+        self.assertEqual(unavailable.status_code, 404)
 
-    def test_learning_content_endpoints_require_postgres_instead_of_demo_content(self):
+    def test_learning_content_endpoints_read_postgres_content(self):
         self.demo_login()
         for endpoint in ("/api/paths", "/api/vocabulary", "/api/scenarios", "/api/challenges"):
             response = self.client.get(endpoint)
-            self.assertEqual(response.status_code, 503)
-            self.assertIn("PostgreSQL", response.get_json()["error"])
-            self.assertTrue(response.get_json()["missing_data"])
+            self.assertEqual(response.status_code, 200)
 
     def test_learning_path_returns_lesson_media_urls(self):
         self.demo_login()
-        db = sqlite3.connect(backend.DATABASE)
-        db.row_factory = sqlite3.Row
-        try:
-            db.executescript(
-                """
-                CREATE TABLE learning_paths (
-                    path_id INTEGER PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    description TEXT,
-                    level TEXT,
-                    is_published BOOLEAN NOT NULL
-                );
-                CREATE TABLE lessons (
-                    lesson_id INTEGER PRIMARY KEY,
-                    path_id INTEGER NOT NULL,
-                    title TEXT NOT NULL,
-                    duration_minutes INTEGER,
-                    content TEXT,
-                    image_url TEXT,
-                    video_url TEXT
-                );
-                CREATE TABLE lesson_progress (
-                    user_id INTEGER NOT NULL,
-                    lesson_id INTEGER NOT NULL,
-                    progress_percent NUMERIC NOT NULL DEFAULT 0
-                );
-                INSERT INTO learning_paths VALUES (1, 'Greetings', 'Start here', 'Starter', 1);
-                INSERT INTO lessons VALUES
-                    (1, 1, 'Hello', 5, '{"sections":[]}', 'https://cdn.example/hello.jpg', 'https://cdn.example/hello.mp4');
-                """
+        with backend.app.app_context():
+            db = backend.get_db()
+            path_id = backend.insert_id(
+                db,
+                "INSERT INTO learning_paths(slug, title, description, level, is_published) "
+                "VALUES(?, ?, ?, ?, TRUE)",
+                ("greetings", "Greetings", "Start here", "Starter"),
+                backend.PATH_PK,
+            )
+            backend.insert_id(
+                db,
+                "INSERT INTO lessons(path_id, slug, title, duration_minutes, content, image_url, video_url) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (
+                    path_id,
+                    "hello",
+                    "Hello",
+                    "5:00",
+                    backend.Jsonb({"sections": []}),
+                    "https://cdn.example/hello.jpg",
+                    "https://cdn.example/hello.mp4",
+                ),
+                backend.LESSON_PK,
             )
             db.commit()
-            with patch.multiple(
-                backend,
-                USE_POSTGRES=True,
-                PATH_PK="path_id",
-                LESSON_PK="lesson_id",
-                LESSON_PUBLISHED_FILTER="",
-            ), patch.object(
-                backend, "postgres_data_required", return_value=None
-            ), patch.object(backend, "get_db", return_value=db):
-                response = self.client.get("/api/paths/1")
-
-            self.assertEqual(response.status_code, 200)
-            lesson = response.get_json()["lessons"][0]
-            self.assertEqual(lesson["image_url"], "https://cdn.example/hello.jpg")
-            self.assertEqual(lesson["video_url"], "https://cdn.example/hello.mp4")
-        finally:
-            db.close()
+        response = self.client.get(f"/api/paths/{path_id}")
+        self.assertEqual(response.status_code, 200)
+        lesson = response.get_json()["lessons"][0]
+        self.assertEqual(lesson["image_url"], "https://cdn.example/hello.jpg")
+        self.assertEqual(lesson["video_url"], "https://cdn.example/hello.mp4")
 
     def test_database_connection_error_gives_configuration_guidance(self):
         self.demo_login()
-        with patch.object(backend, "USE_POSTGRES", True), patch.object(
+        with patch.object(
             backend,
             "get_db",
             side_effect=backend.DatabaseConnectionError("connection unavailable"),
@@ -369,10 +384,14 @@ class TalinturoApiTests(unittest.TestCase):
     def test_data_readiness_reports_postgres_configuration(self):
         self.demo_login()
         response = self.client.get("/api/data/readiness")
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.get_json()["missing_data"][0]["table"], "DATABASE_URL")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["missing_data"][0]["table"], "learning_paths")
 
     def test_instructor_can_add_a_learner_once(self):
+        self.client.post(
+            "/api/auth/signup",
+            json={"name": "Sam Rivera", "email": "sam@example.com", "password": "safe-password"},
+        )
         self.demo_login("instructor")
         classrooms = self.client.get("/api/instructor/classrooms").get_json()["classrooms"]
         classroom_id = classrooms[0]["id"]
@@ -391,7 +410,7 @@ class TalinturoApiTests(unittest.TestCase):
         ).get_json()
         self.assertEqual(len(roster["students"]), 1)
 
-    def test_classroom_join_routes_require_a_learner_and_postgres(self):
+    def test_classroom_join_routes_require_a_learner(self):
         self.assertEqual(self.client.get("/api/classrooms").status_code, 401)
         self.assertEqual(
             self.client.post("/api/classrooms/join", json={"code": "SUNNY24"}).status_code,
@@ -407,71 +426,33 @@ class TalinturoApiTests(unittest.TestCase):
 
         self.demo_login("learner")
         response = self.client.get("/api/classrooms")
-        self.assertEqual(response.status_code, 503)
-        self.assertIn("PostgreSQL", response.get_json()["error"])
+        self.assertEqual(response.status_code, 200)
         join_response = self.client.post(
             "/api/classrooms/join", json={"code": "SUNNY24"}
         )
-        self.assertEqual(join_response.status_code, 503)
+        self.assertEqual(join_response.status_code, 201)
 
     def test_learner_joins_classroom_with_invite_code(self):
         self.demo_login("learner")
-        db = sqlite3.connect(backend.DATABASE)
-        db.row_factory = sqlite3.Row
-        try:
-            db.execute("ALTER TABLE classrooms ADD COLUMN classroom_id INTEGER")
-            db.execute("ALTER TABLE classrooms ADD COLUMN invite_code TEXT")
-            db.execute(
-                "ALTER TABLE classrooms ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"
-            )
-            db.execute(
-                "UPDATE classrooms SET classroom_id = id, invite_code = code"
-            )
-            db.execute(
-                """
-                CREATE TABLE classroom_memberships (
-                    membership_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    classroom_id INTEGER NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'pending',
-                    joined_at TEXT,
-                    UNIQUE(user_id, classroom_id)
-                )
-                """
-            )
-            classroom = db.execute(
+        with backend.app.app_context():
+            classroom = backend.get_db().execute(
                 "SELECT classroom_id, invite_code FROM classrooms LIMIT 1"
             ).fetchone()
-            db.commit()
+        joined = self.client.post(
+            "/api/classrooms/join",
+            json={"code": classroom["invite_code"].lower()},
+        )
+        self.assertEqual(joined.status_code, 201)
+        self.assertEqual(joined.get_json()["classroom"]["id"], classroom["classroom_id"])
 
-            schema_overrides = {
-                "USE_POSTGRES": True,
-                "CLASSROOM_PK": "classroom_id",
-                "MEMBERSHIP_PK": "membership_id",
-            }
-            with patch.multiple(backend, **schema_overrides), patch.object(
-                backend, "postgres_data_required", return_value=None
-            ), patch.object(backend, "get_db", return_value=db):
-                joined = self.client.post(
-                    "/api/classrooms/join",
-                    json={"code": classroom["invite_code"].lower()},
-                )
-                self.assertEqual(joined.status_code, 201)
-                self.assertEqual(
-                    joined.get_json()["classroom"]["id"], classroom["classroom_id"]
-                )
+        listing = self.client.get("/api/classrooms")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(len(listing.get_json()["classrooms"]), 1)
 
-                listing = self.client.get("/api/classrooms")
-                self.assertEqual(listing.status_code, 200)
-                self.assertEqual(len(listing.get_json()["classrooms"]), 1)
-
-                duplicate = self.client.post(
-                    "/api/classrooms/join",
-                    json={"code": classroom["invite_code"]},
-                )
-                self.assertEqual(duplicate.status_code, 409)
-        finally:
-            db.close()
+        duplicate = self.client.post(
+            "/api/classrooms/join", json={"code": classroom["invite_code"]}
+        )
+        self.assertEqual(duplicate.status_code, 409)
 
     def test_profile_updates_name_and_learning_preferences(self):
         self.demo_login()

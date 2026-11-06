@@ -3,43 +3,38 @@ import hmac
 import os
 import re
 import secrets
-import sqlite3
 from datetime import date, timedelta
 from functools import wraps
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from authlib.integrations.flask_client import OAuth
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from flask import Flask, g, jsonify, redirect, request, session
 from flask_cors import CORS
 
-try:
-    import psycopg
-    from psycopg.rows import dict_row
-    from psycopg.types.json import Jsonb
-except ImportError:
-    psycopg = None
-    dict_row = None
-    Jsonb = None
+import psycopg
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
-INTEGRITY_ERRORS = (sqlite3.IntegrityError,) + (
-    (psycopg.IntegrityError,) if psycopg is not None else ()
-)
+INTEGRITY_ERRORS = (psycopg.IntegrityError,)
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR.parent / ".env")
-DATABASE = Path(os.environ.get("TALINTURO_DATABASE") or BASE_DIR / "talinturo.sqlite3")
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-USE_POSTGRES = bool(DATABASE_URL)
+ENV_FILE = BASE_DIR.parent / ".env"
+load_dotenv(ENV_FILE)
+FILE_DATABASE_URL = dotenv_values(ENV_FILE).get("DATABASE_URL")
+DATABASE_URL = (
+    FILE_DATABASE_URL if FILE_DATABASE_URL is not None else os.environ.get("DATABASE_URL", "")
+).strip()
 DEMO_MODE = os.environ.get("TALINTURO_DEMO_MODE", "false").lower() == "true"
-USER_PK = "user_id" if USE_POSTGRES else "id"
-PATH_PK = "path_id" if USE_POSTGRES else "id"
-LESSON_PK = "lesson_id" if USE_POSTGRES else "id"
-SIGN_PK = "sign_id" if USE_POSTGRES else "id"
-ACTIVITY_PK = "activity_id" if USE_POSTGRES else "id"
-ATTEMPT_PK = "attempt_id" if USE_POSTGRES else "id"
-CLASSROOM_PK = "classroom_id" if USE_POSTGRES else "id"
-MEMBERSHIP_PK = "membership_id" if USE_POSTGRES else "id"
-ACHIEVEMENT_PK = "achievement_id" if USE_POSTGRES else "id"
+USER_PK = "user_id"
+PATH_PK = "path_id"
+LESSON_PK = "lesson_id"
+SIGN_PK = "sign_id"
+ACTIVITY_PK = "activity_id"
+ATTEMPT_PK = "attempt_id"
+CLASSROOM_PK = "classroom_id"
+MEMBERSHIP_PK = "membership_id"
+ACHIEVEMENT_PK = "achievement_id"
 LESSON_PUBLISHED_FILTER = "AND l.is_published = TRUE"
 SINGLE_LESSON_PUBLISHED_FILTER = "AND is_published = TRUE"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
@@ -99,22 +94,25 @@ CORS(
 
 def get_db():
     if "db" not in g:
-        if USE_POSTGRES:
-            if psycopg is None:
-                raise RuntimeError("PostgreSQL support requires psycopg. Install backend/requirements.txt.")
-            try:
-                connection = psycopg.connect(DATABASE_URL, row_factory=dict_row)
-            except psycopg.OperationalError as error:
-                raise DatabaseConnectionError(
-                    "Could not connect to PostgreSQL. Check DATABASE_URL and the PostgreSQL settings in the Flask terminal."
-                ) from error
-            g.db = PostgresDatabase(connection)
-        else:
-            DATABASE.parent.mkdir(parents=True, exist_ok=True)
-            g.db = sqlite3.connect(DATABASE)
-            g.db.row_factory = sqlite3.Row
-            g.db.execute("PRAGMA foreign_keys = ON")
+        try:
+            connection = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        except psycopg.OperationalError as error:
+            raise DatabaseConnectionError(
+                "Could not connect to PostgreSQL. Check DATABASE_URL or PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD."
+            ) from error
+        g.db = PostgresDatabase(connection)
     return g.db
+
+
+def validate_media_url(value, label):
+    url = str(value or "").strip()
+    if len(url) > 2048:
+        raise ValueError(f"{label} must be 2048 characters or fewer.")
+    if url:
+        parsed = urlsplit(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError(f"{label} must be an absolute HTTP or HTTPS URL.")
+    return url or None
 
 
 @app.errorhandler(DatabaseConnectionError)
@@ -122,11 +120,11 @@ def handle_database_connection_error(_error):
     return (
         jsonify(
             {
-                "error": "The learning database is unavailable. Check DATABASE_URL and PostgreSQL credentials, then restart Flask.",
+                "error": "The PostgreSQL database is unavailable. Check DATABASE_URL or the PG* connection settings, then restart Flask.",
                 "missing_data": [
                     {
-                        "table": "DATABASE_URL",
-                        "records": "Set DATABASE_URL (and PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD if needed) in the same terminal that runs the backend.",
+                        "table": "PostgreSQL connection settings",
+                        "records": "Set DATABASE_URL or configure PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD in the backend environment.",
                     }
                 ],
             }
@@ -153,9 +151,7 @@ def stored_password_values(salt, password_hash):
 
 
 def insert_id(db, sql, params, id_column="id"):
-    if USE_POSTGRES:
-        return db.execute(f"{sql} RETURNING {id_column}", params).fetchone()[id_column]
-    return db.execute(sql, params).lastrowid
+    return db.execute(f"{sql} RETURNING {id_column}", params).fetchone()[id_column]
 
 
 def require_postgres_schema(db):
@@ -184,7 +180,7 @@ def require_postgres_schema(db):
     if missing_tables:
         raise RuntimeError(
             "The PostgreSQL public schema is missing required tables: "
-            f"{', '.join(missing_tables)}. Restore talinturo_database.sql before "
+            f"{', '.join(missing_tables)}. Restore talinturo.sql before "
             "starting the API."
         )
     required_columns = {
@@ -218,127 +214,28 @@ def require_postgres_schema(db):
     if missing_columns:
         raise RuntimeError(
             "The PostgreSQL schema is missing required columns: "
-            f"{', '.join(missing_columns)}. Restore the current talinturo_database.sql "
+            f"{', '.join(missing_columns)}. Restore the current talinturo.sql "
             "schema before starting the API."
+        )
+    duration_type = db.execute(
+        "SELECT data_type FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'lessons' AND column_name = 'duration_minutes'"
+    ).fetchone()
+    if duration_type and duration_type["data_type"] not in ("text", "character varying"):
+        raise RuntimeError(
+            "lessons.duration_minutes must use the M:SS text format. "
+            "Apply migrations/002_lesson_duration_mmss.sql to the PostgreSQL database."
         )
 
 
 def initialize_database():
-    if USE_POSTGRES:
-        with app.app_context():
-            db = get_db()
-            require_postgres_schema(db)
-        return
-
     with app.app_context():
         db = get_db()
-        db.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                email TEXT NOT NULL UNIQUE,
-                password_salt TEXT NOT NULL,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'learner',
-                learner_type TEXT NOT NULL DEFAULT 'Adult learner',
-                learning_goal TEXT NOT NULL DEFAULT 'Everyday conversations',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS oauth_accounts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                provider TEXT NOT NULL,
-                subject TEXT NOT NULL,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(provider, subject)
-            );
-            CREATE TABLE IF NOT EXISTS user_preferences (
-                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-                theme_mode TEXT NOT NULL DEFAULT 'light' CHECK (theme_mode IN ('light', 'dark')),
-                sound INTEGER NOT NULL DEFAULT 1,
-                reduced_motion INTEGER NOT NULL DEFAULT 0,
-                weekly_summary INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS classrooms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                code TEXT NOT NULL UNIQUE,
-                description TEXT NOT NULL DEFAULT '',
-                instructor_id INTEGER REFERENCES users(id),
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS progress_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER REFERENCES users(id),
-                activity TEXT NOT NULL,
-                score INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS classroom_students (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE,
-                name TEXT NOT NULL,
-                email TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(classroom_id, email)
-            );
-            """
-        )
-        user_columns = {row["name"] for row in db.execute("PRAGMA table_info(users)")}
-        if "learner_type" not in user_columns:
-            db.execute("ALTER TABLE users ADD COLUMN learner_type TEXT NOT NULL DEFAULT 'Adult learner'")
-        if "learning_goal" not in user_columns:
-            db.execute("ALTER TABLE users ADD COLUMN learning_goal TEXT NOT NULL DEFAULT 'Everyday conversations'")
-        if DEMO_MODE and db.execute("SELECT id FROM users LIMIT 1").fetchone() is None:
-            salt, password_hash = hash_password("Talinturo2025!")
-            teacher_id = db.execute(
-                "INSERT INTO users(name, email, password_salt, password_hash, role) VALUES(?, ?, ?, ?, ?)",
-                ("Jamie Santos", "teacher@example.com", salt, password_hash, "instructor"),
-            ).lastrowid
-            learner_salt, learner_hash = hash_password("Talinturo2025!")
-            learner_id = db.execute(
-                "INSERT INTO users(name, email, password_salt, password_hash, role) VALUES(?, ?, ?, ?, ?)",
-                ("Alex Rivera", "learner@example.com", learner_salt, learner_hash, "learner"),
-            ).lastrowid
-            db.execute(
-                "INSERT INTO classrooms(name, code, description, instructor_id) VALUES(?, ?, ?, ?)",
-                ("Sunshine Sign Stars", "SUNNY24", "A friendly place to learn together.", teacher_id),
-            )
-            db.execute(
-                "INSERT INTO classrooms(name, code, description, instructor_id) VALUES(?, ?, ?, ?)",
-                ("Little Language Club", "FSLCLUB8", "Small signs, big connections.", teacher_id),
-            )
-            for activity, score in (("greetings", 92), ("vocabulary", 86), ("scenario-store", 100)):
-                db.execute(
-                    "INSERT INTO progress_events(user_id, activity, score) VALUES(?, ?, ?)",
-                    (learner_id, activity, score),
-                )
-        db.commit()
+        require_postgres_schema(db)
 
 
 def json_error(message, status):
     return jsonify({"error": message}), status
-
-
-def postgres_data_required():
-    if USE_POSTGRES:
-        return None
-    return (
-        jsonify(
-            {
-                "error": "PostgreSQL is required for learning content and progress data.",
-                "missing_data": [
-                    {
-                        "table": "DATABASE_URL",
-                        "records": "Configure a PostgreSQL connection in the backend environment.",
-                    }
-                ],
-            }
-        ),
-        503,
-    )
 
 
 def postgres_missing_records(db, table_queries):
@@ -385,13 +282,12 @@ def login_required(view):
     def wrapped(*args, **kwargs):
         if not session.get("user_id"):
             return json_error("Please sign in to continue.", 401)
-        if USE_POSTGRES:
-            account = get_db().execute(
-                "SELECT is_active FROM users WHERE user_id = ?", (session["user_id"],)
-            ).fetchone()
-            if account is None or not account["is_active"]:
-                session.clear()
-                return json_error("This account is inactive. Contact your Talinturo administrator.", 403)
+        account = get_db().execute(
+            "SELECT is_active FROM users WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        if account is None or not account["is_active"]:
+            session.clear()
+            return json_error("This account is inactive. Contact your Talinturo administrator.", 403)
         return view(*args, **kwargs)
 
     return wrapped
@@ -402,13 +298,12 @@ def instructor_required(view):
     def wrapped(*args, **kwargs):
         if not session.get("user_id"):
             return json_error("Please sign in to continue.", 401)
-        if USE_POSTGRES:
-            account = get_db().execute(
-                "SELECT is_active FROM users WHERE user_id = ?", (session["user_id"],)
-            ).fetchone()
-            if account is None or not account["is_active"]:
-                session.clear()
-                return json_error("This account is inactive. Contact your Talinturo administrator.", 403)
+        account = get_db().execute(
+            "SELECT is_active FROM users WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        if account is None or not account["is_active"]:
+            session.clear()
+            return json_error("This account is inactive. Contact your Talinturo administrator.", 403)
         if session.get("role") != "instructor":
             return json_error("Instructor access is required.", 403)
         return view(*args, **kwargs)
@@ -421,13 +316,12 @@ def admin_required(view):
     def wrapped(*args, **kwargs):
         if not session.get("user_id"):
             return json_error("Please sign in to continue.", 401)
-        if USE_POSTGRES:
-            account = get_db().execute(
-                "SELECT is_active FROM users WHERE user_id = ?", (session["user_id"],)
-            ).fetchone()
-            if account is None or not account["is_active"]:
-                session.clear()
-                return json_error("This account is inactive. Contact your Talinturo administrator.", 403)
+        account = get_db().execute(
+            "SELECT is_active FROM users WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        if account is None or not account["is_active"]:
+            session.clear()
+            return json_error("This account is inactive. Contact your Talinturo administrator.", 403)
         if session.get("role") != "admin":
             return json_error("Administrator access is required.", 403)
         return view(*args, **kwargs)
@@ -627,7 +521,7 @@ def login():
         return json_error("Email or password is incorrect.", 401)
     if expected_role and user["role"] != expected_role:
         return json_error("This sign-in is for a different account type.", 403)
-    if USE_POSTGRES and not user["is_active"]:
+    if not user["is_active"]:
         return json_error("This account is inactive. Contact your Talinturo administrator.", 403)
     session.clear()
     session["user_id"] = user[USER_PK]
@@ -653,8 +547,6 @@ def current_user():
 @app.get("/api/admin/overview")
 @admin_required
 def admin_overview():
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     db = get_db()
     counts = {
         "learners": "SELECT COUNT(*) AS total FROM users WHERE role = 'learner'",
@@ -672,8 +564,6 @@ def admin_overview():
 @app.get("/api/admin/accounts")
 @admin_required
 def admin_accounts():
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     rows = get_db().execute(
         "SELECT user_id AS id, name, email, role, is_active, created_at "
         "FROM users ORDER BY created_at DESC, user_id DESC"
@@ -684,8 +574,6 @@ def admin_accounts():
 @app.post("/api/admin/accounts")
 @admin_required
 def admin_create_account():
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
     email = str(data.get("email", "")).strip().lower()
@@ -722,8 +610,6 @@ def admin_create_account():
 @app.patch("/api/admin/accounts/<int:user_id>/status")
 @admin_required
 def admin_update_account_status(user_id):
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     active = (request.get_json(silent=True) or {}).get("is_active")
     if not isinstance(active, bool):
         return json_error("Account status must be active or inactive.", 400)
@@ -744,8 +630,6 @@ def admin_update_account_status(user_id):
 @app.get("/api/admin/content")
 @admin_required
 def admin_content():
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     rows = get_db().execute(
         "SELECT p.path_id AS id, p.slug, p.title, p.description, p.level, p.is_published, "
         "p.created_at, COUNT(l.lesson_id) AS lesson_count "
@@ -754,7 +638,7 @@ def admin_content():
     ).fetchall()
     lessons = get_db().execute(
         "SELECT l.lesson_id AS id, l.path_id, l.slug, l.title, l.description, "
-        "l.duration_minutes, l.content, l.is_published, p.title AS path_title "
+        "l.duration_minutes, l.content, l.image_url, l.video_url, l.is_published, p.title AS path_title "
         "FROM lessons l JOIN learning_paths p ON p.path_id = l.path_id "
         "ORDER BY l.path_id, l.lesson_id"
     ).fetchall()
@@ -764,8 +648,6 @@ def admin_content():
 @app.post("/api/admin/paths")
 @admin_required
 def admin_create_path():
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     data = request.get_json(silent=True) or {}
     title = str(data.get("title", "")).strip()
     description = str(data.get("description", "")).strip()
@@ -796,8 +678,6 @@ def admin_create_path():
 @app.patch("/api/admin/paths/<int:path_id>")
 @admin_required
 def admin_update_path(path_id):
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     data = request.get_json(silent=True) or {}
     published = data.get("is_published")
     if not isinstance(published, bool):
@@ -816,32 +696,56 @@ def admin_update_path(path_id):
 @app.post("/api/admin/paths/<int:path_id>/lessons")
 @admin_required
 def admin_create_lesson(path_id):
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
     data = request.get_json(silent=True) or {}
     title = str(data.get("title", "")).strip()
     description = str(data.get("description", "")).strip()
     slug = re.sub(r"[^a-z0-9]+", "-", str(data.get("slug") or title).lower()).strip("-")
-    duration = data.get("duration_minutes", 5)
+    duration = data.get("duration_minutes", "5:00")
     content = data.get("content")
+    image_url = data.get("image_url", "")
+    video_url = data.get("video_url", "")
     published = data.get("is_published", False)
     if not title or len(title) > 200 or not slug or len(slug) > 120:
         return json_error("Enter a valid lesson title and slug.", 400)
-    if isinstance(duration, bool) or not isinstance(duration, int) or not 0 <= duration <= 600:
-        return json_error("Lesson duration must be a whole number from 0 to 600 minutes.", 400)
-    if not isinstance(content, dict) or not isinstance(content.get("sections"), list) or not content["sections"]:
-        return json_error("Lesson content must include a non-empty sections array.", 400)
+    if isinstance(duration, int) and not isinstance(duration, bool):
+        duration = f"{duration}:00"
+    if not isinstance(duration, str) or not re.fullmatch(r"\d+:[0-5]\d", duration):
+        return json_error("Lesson duration must use M:SS format, such as 3:36.", 400)
+    minutes_text, seconds_text = duration.split(":")
+    minutes_text = minutes_text.lstrip("0") or "0"
+    if len(minutes_text) > 3 or int(minutes_text) * 60 + int(seconds_text) > 600 * 60:
+        return json_error("Lesson duration cannot exceed 600 minutes.", 400)
+    if not isinstance(content, dict):
+        return json_error("Lesson content must be a JSON object.", 400)
     if not isinstance(published, bool):
         return json_error("Publish status must be true or false.", 400)
+    try:
+        image_url = validate_media_url(image_url, "Image URL")
+        video_url = validate_media_url(video_url, "Video URL")
+        captions_url = validate_media_url(data.get("captions_url", ""), "Captions URL")
+    except ValueError as error:
+        return json_error(str(error), 400)
+    content = dict(content)
+    transcript = str(data.get("transcript", "")).strip()
+    if captions_url:
+        content["captions_url"] = captions_url
+    else:
+        content.pop("captions_url", None)
+    if transcript:
+        content["transcript"] = transcript
+    else:
+        content.pop("transcript", None)
+    if not content.get("sections") and not video_url:
+        return json_error("Add lesson sections or a video URL before saving.", 400)
     db = get_db()
     if db.execute("SELECT 1 FROM learning_paths WHERE path_id = ?", (path_id,)).fetchone() is None:
         return json_error("Learning path not found.", 404)
     try:
         lesson_id = insert_id(
             db,
-            "INSERT INTO lessons(path_id, slug, title, description, duration_minutes, content, is_published) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?)",
-            (path_id, slug, title, description, duration, Jsonb(content), published),
+            "INSERT INTO lessons(path_id, slug, title, description, duration_minutes, content, image_url, video_url, is_published) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (path_id, slug, title, description, duration, Jsonb(content), image_url, video_url, published),
             LESSON_PK,
         )
         db.commit()
@@ -854,19 +758,55 @@ def admin_create_lesson(path_id):
 @app.patch("/api/admin/lessons/<int:lesson_id>")
 @admin_required
 def admin_update_lesson(lesson_id):
-    if not USE_POSTGRES:
-        return json_error("The admin workspace requires PostgreSQL.", 503)
-    published = (request.get_json(silent=True) or {}).get("is_published")
-    if not isinstance(published, bool):
-        return json_error("Publish status must be true or false.", 400)
-    row = get_db().execute(
-        "UPDATE lessons SET is_published = ? WHERE lesson_id = ? "
-        "RETURNING lesson_id AS id, is_published",
-        (published, lesson_id),
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    updates = []
+    values = []
+    if "is_published" in data:
+        if not isinstance(data["is_published"], bool):
+            return json_error("Publish status must be true or false.", 400)
+        updates.append("is_published = ?")
+        values.append(data["is_published"])
+    if any(key in data for key in ("image_url", "video_url", "captions_url", "transcript")):
+        current = db.execute("SELECT content FROM lessons WHERE lesson_id = ?", (lesson_id,)).fetchone()
+        if current is None:
+            return json_error("Lesson not found.", 404)
+        content = dict(current["content"] or {})
+        try:
+            if "image_url" in data:
+                updates.append("image_url = ?")
+                values.append(validate_media_url(data["image_url"], "Image URL"))
+            if "video_url" in data:
+                updates.append("video_url = ?")
+                values.append(validate_media_url(data["video_url"], "Video URL"))
+            if "captions_url" in data:
+                captions_url = validate_media_url(data["captions_url"], "Captions URL")
+                if captions_url:
+                    content["captions_url"] = captions_url
+                else:
+                    content.pop("captions_url", None)
+            if "transcript" in data:
+                transcript = str(data["transcript"] or "").strip()
+                if transcript:
+                    content["transcript"] = transcript
+                else:
+                    content.pop("transcript", None)
+        except ValueError as error:
+            return json_error(str(error), 400)
+        if "captions_url" in data or "transcript" in data:
+            updates.append("content = ?")
+            values.append(Jsonb(content))
+    if not updates:
+        return json_error("No lesson changes were provided.", 400)
+    values.append(lesson_id)
+    row = db.execute(
+        f"UPDATE lessons SET {', '.join(updates)} WHERE lesson_id = ? "
+        "RETURNING lesson_id AS id, is_published, image_url, video_url, content",
+        values,
     ).fetchone()
     if row is None:
         return json_error("Lesson not found.", 404)
-    get_db().commit()
+    db.commit()
     return jsonify({"lesson": dict(row)})
 
 
@@ -931,9 +871,6 @@ def update_preferences():
 @app.get("/api/dashboard")
 @login_required
 def dashboard():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     user_id = session["user_id"]
     lesson_publish_filter = "AND l.is_published = TRUE"
@@ -1019,9 +956,6 @@ def dashboard():
 @app.get("/api/data/readiness")
 @login_required
 def data_readiness():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     requirements = [
         (
@@ -1094,9 +1028,6 @@ def data_readiness():
 @app.get("/api/paths")
 @login_required
 def learning_paths():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     rows = get_db().execute(
         f"""
         SELECT p.{PATH_PK} AS id, p.title, p.description, p.level,
@@ -1118,9 +1049,6 @@ def learning_paths():
 @app.get("/api/paths/<int:path_id>")
 @login_required
 def learning_path_detail(path_id):
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     path = db.execute(
         f"SELECT {PATH_PK} AS id, title, description, level FROM learning_paths "
@@ -1148,13 +1076,10 @@ def learning_path_detail(path_id):
 @app.post("/api/lessons/<int:lesson_id>/complete")
 @login_required
 def complete_lesson(lesson_id):
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     lesson = db.execute(
         f"""
-        SELECT l.{LESSON_PK} AS id, l.title, l.content
+        SELECT l.{LESSON_PK} AS id, l.title, l.content, l.video_url
         FROM lessons l
         JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE
         WHERE l.{LESSON_PK} = ? {SINGLE_LESSON_PUBLISHED_FILTER}
@@ -1163,7 +1088,9 @@ def complete_lesson(lesson_id):
     ).fetchone()
     if lesson is None:
         return json_error("This lesson is not available.", 404)
-    if not isinstance(lesson["content"], dict) or not lesson["content"].get("sections"):
+    if not lesson["video_url"] and (
+        not isinstance(lesson["content"], dict) or not lesson["content"].get("sections")
+    ):
         return (
             jsonify(
                 {
@@ -1171,7 +1098,7 @@ def complete_lesson(lesson_id):
                     "missing_data": [
                         {
                             "table": "lessons.content",
-                            "records": "Add a sections array with titled lesson content before marking this lesson complete.",
+                            "records": "Add a video_url or a sections array with titled lesson content before marking this lesson complete.",
                         }
                     ],
                 }
@@ -1193,6 +1120,27 @@ def complete_lesson(lesson_id):
     return jsonify({"success": True, "lesson_id": lesson_id, "progress": 100})
 
 
+@app.get("/api/lessons/<int:lesson_id>")
+@login_required
+def lesson_detail(lesson_id):
+    row = get_db().execute(
+        f"""
+        SELECT l.{LESSON_PK} AS id, l.path_id, l.title, l.description,
+               l.duration_minutes, l.content, l.image_url, l.video_url,
+               p.title AS path_title, COALESCE(lp.progress_percent, 0) AS progress
+        FROM lessons l
+        JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE
+        LEFT JOIN lesson_progress lp
+          ON lp.lesson_id = l.{LESSON_PK} AND lp.user_id = ?
+        WHERE l.{LESSON_PK} = ? {SINGLE_LESSON_PUBLISHED_FILTER}
+        """,
+        (session["user_id"], lesson_id),
+    ).fetchone()
+    if row is None:
+        return json_error("This lesson is not available.", 404)
+    return jsonify({"lesson": dict(row)})
+
+
 @app.put("/api/lessons/<int:lesson_id>/progress")
 @login_required
 def update_lesson_progress(lesson_id):
@@ -1200,9 +1148,6 @@ def update_lesson_progress(lesson_id):
     progress_percent = data.get("progress_percent")
     if type(progress_percent) is not int or not 1 <= progress_percent <= 99:
         return json_error("Progress must be a whole number between 1 and 99. Use lesson completion to reach 100.", 400)
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     lesson = db.execute(
         f"""
@@ -1269,9 +1214,6 @@ def update_lesson_progress(lesson_id):
 @app.get("/api/vocabulary")
 @login_required
 def vocabulary():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     rows = get_db().execute(
         f"""
         SELECT v.{SIGN_PK} AS id, v.word, v.meaning, v.category, v.hint, v.media_url,
@@ -1290,9 +1232,6 @@ def vocabulary():
 @app.route("/api/vocabulary/<int:sign_id>/favorite", methods=["PUT", "DELETE"])
 @login_required
 def vocabulary_favorite(sign_id):
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     sign = db.execute(
         f"SELECT {SIGN_PK} FROM signs WHERE {SIGN_PK} = ? AND is_published = TRUE",
@@ -1320,9 +1259,6 @@ def vocabulary_favorite(sign_id):
 @app.get("/api/scenarios")
 @login_required
 def scenarios():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     rows = get_db().execute(
         f"SELECT {ACTIVITY_PK} AS id, slug, title, content FROM activities "
         f"WHERE activity_type = 'scenario' AND is_published = TRUE ORDER BY {ACTIVITY_PK}"
@@ -1349,9 +1285,6 @@ def scenarios():
 @app.get("/api/challenges")
 @login_required
 def challenges():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     rows = get_db().execute(
         f"SELECT {ACTIVITY_PK} AS id, slug, title, content FROM activities "
         f"WHERE activity_type = 'challenge' AND is_published = TRUE ORDER BY {ACTIVITY_PK}"
@@ -1362,9 +1295,6 @@ def challenges():
 @app.get("/api/practice")
 @login_required
 def practice_activities():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     rows = get_db().execute(
         f"SELECT {ACTIVITY_PK} AS id, slug, title, content FROM activities "
         f"WHERE activity_type = 'practice' AND is_published = TRUE ORDER BY {ACTIVITY_PK}"
@@ -1375,9 +1305,6 @@ def practice_activities():
 @app.get("/api/activities/<int:activity_id>")
 @login_required
 def activity_detail(activity_id):
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     row = get_db().execute(
         f"""
         SELECT {ACTIVITY_PK} AS id, slug, activity_type, title, content
@@ -1398,9 +1325,6 @@ def record_progress():
     activity_id = data.get("activity_id")
     if isinstance(activity_id, bool) or not isinstance(activity_id, int) or activity_id < 1:
         return json_error("A valid published activity is required.", 400)
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     activity = db.execute(
         f"SELECT {ACTIVITY_PK} AS id, title, activity_type, content FROM activities "
@@ -1458,9 +1382,6 @@ def record_progress():
 @app.get("/api/progress")
 @login_required
 def progress():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     user_id = session["user_id"]
     rows = db.execute(
@@ -1532,9 +1453,6 @@ def progress():
 @app.get("/api/instructor/learners")
 @instructor_required
 def instructor_learners():
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     rows = db.execute(
         f"""
@@ -1574,9 +1492,6 @@ def instructor_learners():
 @app.get("/api/instructor/learners/<int:learner_id>")
 @instructor_required
 def instructor_learner_detail(learner_id):
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     db = get_db()
     row = db.execute(
         f"""
@@ -1625,33 +1540,19 @@ def instructor_learner_detail(learner_id):
 @app.get("/api/instructor/classrooms")
 @instructor_required
 def instructor_classrooms():
-    if USE_POSTGRES:
-        rows = get_db().execute(
-            f"""
-            SELECT c.{CLASSROOM_PK} AS id, c.name, c.invite_code AS code, c.description, c.created_at,
-                   COUNT(m.{MEMBERSHIP_PK}) AS student_count
-            FROM classrooms c
-            LEFT JOIN classroom_memberships m
-              ON m.classroom_id = c.{CLASSROOM_PK} AND m.status = 'active'
-            WHERE c.instructor_id = ? AND c.is_active = TRUE
-            GROUP BY c.{CLASSROOM_PK}
-            ORDER BY c.{CLASSROOM_PK}
-            """,
-            (session["user_id"],),
-        ).fetchall()
-    else:
-        rows = get_db().execute(
-            """
-            SELECT c.id, c.name, c.code, c.description, c.created_at,
-                   COUNT(s.id) AS student_count
-            FROM classrooms c
-            LEFT JOIN classroom_students s ON s.classroom_id = c.id
-            WHERE c.instructor_id = ?
-            GROUP BY c.id
-            ORDER BY c.id
-            """,
-            (session["user_id"],),
-        ).fetchall()
+    rows = get_db().execute(
+        f"""
+        SELECT c.{CLASSROOM_PK} AS id, c.name, c.invite_code AS code, c.description, c.created_at,
+               COUNT(m.{MEMBERSHIP_PK}) AS student_count
+        FROM classrooms c
+        LEFT JOIN classroom_memberships m
+          ON m.classroom_id = c.{CLASSROOM_PK} AND m.status = 'active'
+        WHERE c.instructor_id = ? AND c.is_active = TRUE
+        GROUP BY c.{CLASSROOM_PK}
+        ORDER BY c.{CLASSROOM_PK}
+        """,
+        (session["user_id"],),
+    ).fetchall()
     return jsonify({"classrooms": [dict(row) for row in rows]})
 
 
@@ -1660,9 +1561,6 @@ def instructor_classrooms():
 def learner_classrooms():
     if session["role"] != "learner":
         return json_error("Learner access is required.", 403)
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     rows = get_db().execute(
         f"""
         SELECT c.{CLASSROOM_PK} AS id, c.name, c.description, c.created_at, cm.joined_at
@@ -1681,9 +1579,6 @@ def learner_classrooms():
 def join_classroom():
     if session["role"] != "learner":
         return json_error("Learner access is required.", 403)
-    unavailable = postgres_data_required()
-    if unavailable:
-        return unavailable
     data = request.get_json(silent=True) or {}
     code = str(data.get("code", "")).strip().upper()
     if not code or len(code) > 100:
@@ -1716,36 +1611,23 @@ def join_classroom():
 @instructor_required
 def classroom_students(classroom_id):
     db = get_db()
-    if USE_POSTGRES:
-        classroom = db.execute(
-            f"SELECT {CLASSROOM_PK} AS id, name, invite_code AS code FROM classrooms "
-            f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ? AND is_active = TRUE",
-            (classroom_id, session["user_id"]),
-        ).fetchone()
-    else:
-        classroom = db.execute(
-            "SELECT id, name, code FROM classrooms WHERE id = ? AND instructor_id = ?",
-            (classroom_id, session["user_id"]),
-        ).fetchone()
+    classroom = db.execute(
+        f"SELECT {CLASSROOM_PK} AS id, name, invite_code AS code FROM classrooms "
+        f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ? AND is_active = TRUE",
+        (classroom_id, session["user_id"]),
+    ).fetchone()
     if classroom is None:
         return json_error("Classroom not found.", 404)
-    if USE_POSTGRES:
-        students = db.execute(
-            f"""
-            SELECT cm.{MEMBERSHIP_PK} AS id, u.name, u.email, cm.joined_at AS created_at
-            FROM classroom_memberships cm
-            JOIN users u ON u.{USER_PK} = cm.user_id
-            WHERE cm.classroom_id = ? AND cm.status = 'active'
-            ORDER BY cm.{MEMBERSHIP_PK}
-            """,
-            (classroom_id,),
-        ).fetchall()
-    else:
-        students = db.execute(
-            "SELECT id, name, email, created_at FROM classroom_students "
-            "WHERE classroom_id = ? ORDER BY id",
-            (classroom_id,),
-        ).fetchall()
+    students = db.execute(
+        f"""
+        SELECT cm.{MEMBERSHIP_PK} AS id, u.name, u.email, cm.joined_at AS created_at
+        FROM classroom_memberships cm
+        JOIN users u ON u.{USER_PK} = cm.user_id
+        WHERE cm.classroom_id = ? AND cm.status = 'active'
+        ORDER BY cm.{MEMBERSHIP_PK}
+        """,
+        (classroom_id,),
+    ).fetchall()
     return jsonify({"classroom": dict(classroom), "students": [dict(row) for row in students]})
 
 
@@ -1755,67 +1637,47 @@ def add_classroom_student(classroom_id):
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()
     email = str(data.get("email", "")).strip().lower()
-    if (not USE_POSTGRES and not name) or len(name) > 70:
+    if not name or len(name) > 70:
         return json_error("Learner name must be between 1 and 70 characters.", 400)
     if len(email) > 254 or "@" not in email:
         return json_error("Enter a valid learner email address.", 400)
     db = get_db()
-    if USE_POSTGRES:
-        classroom = db.execute(
-            f"SELECT {CLASSROOM_PK} FROM classrooms "
-            f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ? AND is_active = TRUE",
-            (classroom_id, session["user_id"]),
-        ).fetchone()
-    else:
-        classroom = db.execute(
-            f"SELECT {CLASSROOM_PK} FROM classrooms "
-            f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ?",
-            (classroom_id, session["user_id"]),
-        ).fetchone()
+    classroom = db.execute(
+        f"SELECT {CLASSROOM_PK} FROM classrooms "
+        f"WHERE {CLASSROOM_PK} = ? AND instructor_id = ? AND is_active = TRUE",
+        (classroom_id, session["user_id"]),
+    ).fetchone()
     if classroom is None:
         return json_error("Classroom not found.", 404)
     try:
-        if USE_POSTGRES:
-            student_account = db.execute(
-                f"SELECT {USER_PK} AS id, name, email FROM users "
-                f"WHERE lower(email) = ? AND role = 'learner' AND is_active = TRUE",
-                (email,),
-            ).fetchone()
-            if student_account is None:
-                return json_error(
-                    "Create the learner account before adding them to a classroom.",
-                    404,
-                )
-            student_id = insert_id(
-                db,
-                "INSERT INTO classroom_memberships"
-                "(classroom_id, user_id, invited_email, status, joined_at) "
-                "VALUES(?, ?, ?, 'active', CURRENT_TIMESTAMP)",
-                (classroom_id, student_account["id"], email),
-                MEMBERSHIP_PK,
+        student_account = db.execute(
+            f"SELECT {USER_PK} AS id, name, email FROM users "
+            f"WHERE lower(email) = ? AND role = 'learner' AND is_active = TRUE",
+            (email,),
+        ).fetchone()
+        if student_account is None:
+            return json_error(
+                "Create the learner account before adding them to a classroom.",
+                404,
             )
-        else:
-            cursor = db.execute(
-                "INSERT INTO classroom_students(classroom_id, name, email) VALUES(?, ?, ?)",
-                (classroom_id, name, email),
-            )
-            student_id = cursor.lastrowid
+        student_id = insert_id(
+            db,
+            "INSERT INTO classroom_memberships"
+            "(classroom_id, user_id, invited_email, status, joined_at) "
+            "VALUES(?, ?, ?, 'active', CURRENT_TIMESTAMP)",
+            (classroom_id, student_account["id"], email),
+            MEMBERSHIP_PK,
+        )
         db.commit()
     except INTEGRITY_ERRORS:
         db.rollback()
         return json_error("That learner is already in this classroom.", 409)
-    if USE_POSTGRES:
-        student = db.execute(
-            f"SELECT cm.{MEMBERSHIP_PK} AS id, u.name, u.email, cm.joined_at AS created_at "
-            "FROM classroom_memberships cm JOIN users u ON u.user_id = cm.user_id "
-            f"WHERE cm.{MEMBERSHIP_PK} = ?",
-            (student_id,),
-        ).fetchone()
-    else:
-        student = db.execute(
-            "SELECT id, name, email, created_at FROM classroom_students WHERE id = ?",
-            (student_id,),
-        ).fetchone()
+    student = db.execute(
+        f"SELECT cm.{MEMBERSHIP_PK} AS id, u.name, u.email, cm.joined_at AS created_at "
+        "FROM classroom_memberships cm JOIN users u ON u.user_id = cm.user_id "
+        f"WHERE cm.{MEMBERSHIP_PK} = ?",
+        (student_id,),
+    ).fetchone()
     return jsonify({"student": dict(student)}), 201
 
 
@@ -1830,27 +1692,19 @@ def create_classroom():
     if len(description) > 240:
         return json_error("Classroom description must be 240 characters or fewer.", 400)
     db = get_db()
-    code_column = "invite_code" if USE_POSTGRES else "code"
+    code_column = "invite_code"
     code = secrets.token_urlsafe(5).replace("-", "").replace("_", "").upper()[:8]
     while db.execute(
         f"SELECT {CLASSROOM_PK} FROM classrooms WHERE {code_column} = ?", (code,)
     ).fetchone():
         code = secrets.token_urlsafe(5).replace("-", "").replace("_", "").upper()[:8]
-    if USE_POSTGRES:
-        classroom_id = insert_id(
-            db,
-            "INSERT INTO classrooms(instructor_id, name, description, invite_code) "
-            "VALUES(?, ?, ?, ?)",
-            (session["user_id"], name, description, code),
-            CLASSROOM_PK,
-        )
-    else:
-        classroom_id = insert_id(
-            db,
-            "INSERT INTO classrooms(name, code, description, instructor_id) "
-            "VALUES(?, ?, ?, ?)",
-            (name, code, description, session["user_id"]),
-        )
+    classroom_id = insert_id(
+        db,
+        "INSERT INTO classrooms(instructor_id, name, description, invite_code) "
+        "VALUES(?, ?, ?, ?)",
+        (session["user_id"], name, description, code),
+        CLASSROOM_PK,
+    )
     db.commit()
     return jsonify({"id": classroom_id, "name": name, "code": code, "description": description}), 201
 
@@ -1885,8 +1739,6 @@ def update_profile():
     return jsonify({"user": public_user(user)})
 
 
-initialize_database()
-
-
 if __name__ == "__main__":
+    initialize_database()
     app.run(host="127.0.0.1", port=5000, debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
