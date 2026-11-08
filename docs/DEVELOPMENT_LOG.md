@@ -5,6 +5,7 @@
 ### Repository layout update
 
 - Updated the README project layout to reflect the current folder hierarchy, including the frontend feature structure, project skills, database migrations, and SQL scripts.
+- Separated and organized files into their designated folders
 - Added a short purpose description for each documented folder and omitted individual files, generated dependencies, the Python virtual environment, and local cache folders.
 - This was a documentation-only update; no repository folders or application behavior were changed.
 
