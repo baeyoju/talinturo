@@ -33,79 +33,59 @@ In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`
 
 ## Project layout
 
+> **Development note:** This is the current project layout and may change as development continues.
+
 ```text
 talinturo/
-├── .agents/                     # Agent and project-specific skills
-│   └── skills/                  # Reusable agent guidance
-│       ├── supabase/            # Supabase guidance
-│       │   ├── assets/          # Supporting skill assets
-│       │   └── references/      # Supabase reference material
-│       └── supabase-postgres-best-practices/ # PostgreSQL best-practice guidance
-│           └── references/      # PostgreSQL reference material
-├── .vscode/                     # Workspace-specific editor settings
-├── backend/                     # Flask API and backend tests
-├── docs/                        # Setup, environment, and project documentation
-├── frontend/                    # Vite-based React application
-│   ├── public/                  # Static assets served as-is
-│   │   └── signs/               # Sign-language image assets
-│   └── src/                     # Frontend application source
-│       ├── adapters/            # HTTP and session integration layers
-│       │   ├── http/            # API client and HTTP helpers
-│       │   └── session/         # Session and authentication adapters
-│       ├── app/                 # App bootstrap, routing, guards, and hooks
-│       │   ├── guards/          # Route access checks
-│       │   └── hooks/           # App-wide React hooks
-│       ├── assets/              # Imported images and visual assets
-│       │   ├── avatar/          # Avatar assets
-│       │   └── mascots/         # Mascot assets and components
-│       ├── components/          # Shared UI components
-│       │   ├── brand/           # Branding components
-│       │   ├── common/          # Reusable general-purpose components
-│       │   ├── feedback/        # Notices, toasts, and feedback UI
-│       │   ├── layout/          # Shared page and navigation layout
-│       │   └── ui/              # Reusable interface primitives
-│       ├── constants/           # Shared application constants
-│       ├── features/            # Feature-focused screens and components
-│       │   ├── activities/      # Learning activities and results
-│       │   ├── admin/           # Administrative screens
-│       │   ├── auth/            # Sign-in and account access
-│       │   ├── camera/          # Camera preview and related helpers
-│       │   │   ├── components/  # Camera-related UI
-│       │   │   ├── hooks/       # Camera behavior hooks
-│       │   │   └── lib/         # Camera utilities
-│       │   ├── classroom/       # Virtual classroom workflows
-│       │   ├── help/            # Help and support screens
-│       │   ├── instructor/      # Instructor tools and views
-│       │   ├── lesson/          # Lesson content and learning flow
-│       │   │   ├── components/  # Lesson UI
-│       │   │   ├── hooks/       # Lesson behavior hooks
-│       │   │   └── journeys/    # Lesson journey flows
-│       │   ├── onboarding/      # New-user setup flow
-│       │   ├── path/            # Learning paths
-│       │   │   ├── components/  # Learning-path UI
-│       │   │   │   └── components/ # Nested path-specific components
-│       │   │   └── pages/       # Learning-path screens
-│       │   ├── practice/        # Practice activities
-│       │   ├── profile/         # Learner profile features
-│       │   │   ├── avatar/      # Profile avatar features
-│       │   │   ├── components/  # Profile-specific UI
-│       │   │   ├── report/      # Learner reports
-│       │   │   ├── settings/    # Profile and app settings
-│       │   │   └── shop/        # Profile shop features
-│       │   ├── progress/        # Learning progress views
-│       │   ├── splash/          # Splash and entry screens
-│       │   ├── tutorial/        # Tutorial flow
-│       │   └── vocabulary/      # Vocabulary browsing and search
-│       ├── i18n/                # Internationalization resources
-│       ├── lib/                 # Shared utilities and helpers
-│       ├── stores/              # Client-side state stores
-│       ├── styles/              # Global and feature-level stylesheets
-│       └── tests/               # Frontend tests
-├── migrations/                  # Ordered database schema migrations
-└── sql/                         # Database schema and setup scripts
+├── .agents/                         # Project agent skills and lock file
+├── .vscode/                         # Workspace editor settings
+├── backend/
+│   ├── app.py                       # Flask API and SQLite setup
+│   ├── requirements.txt             # Python dependencies
+│   └── test_app.py                  # Backend tests
+├── docs/
+│   ├── DATABASE_CONNECTION_SETUP.md
+│   ├── DEVELOPMENT_LOG.md
+│   ├── ENVIRONMENT.md
+│   └── SETUP.md
+├── frontend/                        # Vite and React application
+│   ├── public/                      # Static assets (currently the app logo)
+│   ├── src/
+│   │   ├── adapters/http/           # API client
+│   │   ├── app/                     # App entry, routes, guards, and hooks
+│   │   ├── assets/mascots/          # Mascot component assets
+│   │   ├── components/              # Shared brand, feedback, layout, and UI
+│   │   ├── constants/               # Shared constants
+│   │   ├── features/                # Feature modules and their pages
+│   │   │   ├── activities/          # Scenarios, challenges, and results
+│   │   │   ├── admin/
+│   │   │   ├── auth/                # Landing, login, and password screens
+│   │   │   ├── classroom/
+│   │   │   ├── help/
+│   │   │   ├── instructor/          # Instructor and learner management
+│   │   │   ├── lesson/
+│   │   │   ├── onboarding/
+│   │   │   ├── path/                # Learning path and lesson media
+│   │   │   ├── practice/
+│   │   │   ├── profile/             # Profile, avatar, and settings
+│   │   │   ├── progress/
+│   │   │   └── vocabulary/
+│   │   └── styles/                  # Global and feature stylesheets
+│   ├── components.json
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
+├── migrations/                      # SQL migration scripts
+├── sql/                             # Database schema and setup scripts
+├── .env.example
+├── .gitignore
+├── package.json                     # Root scripts
+├── package-lock.json
+└── README.md
 ```
 
-Generated dependency, environment, and local cache folders (such as `node_modules/`, `backend/venv/`, and `microsoft/windows/powershell/`) are omitted.
+Generated dependencies and local machine artifacts (including `node_modules/` and `microsoft/windows/powershell/ModuleAnalysisCache`) are omitted.
 
 ## Documentation
 
