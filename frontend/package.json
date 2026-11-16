@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.3",
     "@vitejs/plugin-react": "^4.4.1",
     "framer-motion": "^14.9.0",
     "react": "^19.1.0",

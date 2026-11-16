@@ -1,5 +1,23 @@
 # Talinturo Development Log
 
+## November 16, 2026 — Lesson practice and live landmarks
+
+### Lesson completion flow
+
+- Video completion now records 50% lesson progress. Learners proceed to a practice quiz; completing all correct answers and confirming practice records 100%.
+- Lesson authors can put lesson-specific questions in `lessons.content.practice.questions`. Correct-answer flags are checked by the API and are not returned to learners. Lessons without configured questions receive a basic fallback question.
+- Updated lesson path actions to distinguish starting, resuming, and restarting lessons.
+
+### Camera landmarks
+
+- Added a live, in-browser MediaPipe camera overlay for pose, face, and hand landmarks. Body and face landmarks are shown when a face is detected; hand landmarks can be shown independently.
+- Uses the dedicated Hand Landmarker for finger joints with light frame-to-frame smoothing. Camera preview and landmark overlay share the same fitted frame and zoom.
+- Camera frames are processed in the browser, not recorded or sent to Talinturo's API. The current feature displays landmarks and does not classify FSL signs.
+
+### Documentation
+
+- Updated README and setup instructions for PostgreSQL, the lesson progress milestones, lesson-specific quiz JSON, MediaPipe runtime/model downloads, and camera privacy behavior.
+
 ## November 8, 2026 — Project structure cleanup and folder reorganization
 
 ### Repository layout update

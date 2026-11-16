@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, domAnimation, LazyMotion, m, useReducedMotion } from "framer-motion";
 import { getPendingApiRequests, subscribeToApiLoading } from "@/adapters/http/api";
-import ConnieLoader from "@/components/brand/ConnieLoader";
+import ConnieLoader from "@/assets/mascots/ConnieLoader";
 import { Toast } from "@/components/feedback/Toast";
 import { Footer } from "@/components/layout/Footer";
 import { PageMotionContext } from "@/components/layout/PageMotionContext";

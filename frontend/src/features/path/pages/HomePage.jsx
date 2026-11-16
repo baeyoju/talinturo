@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCard } from "@/components/ui/StatCard";
-import { introTextVariants } from "@/lib/motion";
+import { introTextVariants } from "@/utils/motion";
 
 // Learner dashboard ("Home").
 export function HomePage({ user, onNavigate }) {

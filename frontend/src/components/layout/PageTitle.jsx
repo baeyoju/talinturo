@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { m } from "framer-motion";
-import { introTextVariants } from "@/lib/motion";
+import { introTextVariants } from "@/utils/motion";
 import { PageMotionContext } from "./PageMotionContext";
 
 export function PageTitle({ eyebrow, title, description, action }) {

@@ -55,6 +55,8 @@ npm run dev
 
 Open the URL Vite prints, normally `http://127.0.0.1:5173`. Vite forwards requests under `/api` to the Flask API, so both servers need to be running for backend features.
 
+Camera practice is available on `localhost`/`127.0.0.1` or an HTTPS origin after the learner opens a lesson's practice step and grants browser camera permission. On first use, the browser downloads the MediaPipe WebAssembly runtime and landmark model files. Allow access to jsDelivr and Google Cloud Storage. Camera frames are processed in the browser and are not recorded or uploaded by Talinturo; this feature displays landmarks and does not recognize FSL signs.
+
 ### Connect PostgreSQL
 
 The backend always uses PostgreSQL. The project-root `talinturo.sql` dump contains the tables and data currently exported from PostgreSQL.
@@ -136,7 +138,7 @@ The `talinturo.sql` dump includes `INSERT` statements for rows exported from its
 Review and verify imported learning records before using them for instruction. Add and publish verified learning records as needed:
 
 - `learning_paths`: `slug`, `title`, `description`, `level`, and `is_published`. Paths are ordered by `path_id`.
-- `lessons`: `path_id`, `slug`, `title`, `duration_minutes`, `content` (JSONB), and optional `image_url` and `video_url`. Lesson `content` should include a `description` and a `sections` array of `{ "title": "...", "body": "..." }`. Set `image_url` to an image URL and `video_url` to a browser-playable video URL (for example MP4 or WebM); lessons are ordered by `lesson_id`.
+- `lessons`: `path_id`, `slug`, `title`, `duration_minutes`, `content` (JSONB), and optional `image_url` and `video_url`. Lesson `content` should include a `description` and a `sections` array of `{ "title": "...", "body": "..." }`. Add a lesson-specific `practice.questions` array as shown below. Set `image_url` to an image URL and `video_url` to a browser-playable video URL (for example MP4 or WebM); lessons are ordered by `lesson_id`.
 - `signs`: `lesson_id`, `slug`, `word`, `meaning`, `category`, optional `hint` and `media_url`, and `is_published`.
 - `activities`: unique `slug`, `path_id`, `activity_type` (`practice`, `scenario`, or `challenge`), `title`, `content` (JSONB), and `is_published`. Activities are ordered by `activity_id`.
   - Scenario/challenge `content` can include `category`, `description`, `emoji`, `color`, and `duration_minutes`; it uses `questions: [{ "prompt": "...", "choices": [{ "id": "...", "label": "...", "meaning": "...", "is_correct": true }] }]`. Exactly one choice per question should be correct.
@@ -144,16 +146,37 @@ Review and verify imported learning records before using them for instruction. A
 - `achievements`: `slug`, `title` (used as the API's display name), `description`, and `criteria` (JSONB). `user_achievements` links earned definitions to users through `user_id` and `achievement_id`.
 - `activity_attempts` and `lesson_progress` are learner-generated records. Completing published activities and lessons creates these records; do not prefill fake completion metrics.
 
+Lesson quizzes are stored in the lesson's `content` JSONB. Each question needs exactly one correct choice; the `correct` flag stays server-side and is omitted from the learner-facing lesson response:
+
+```json
+{
+  "practice": {
+    "questions": [
+      {
+        "prompt": "Which hand shape did the video demonstrate?",
+        "choices": [
+          { "id": "open-palm", "label": "Open palm", "correct": true },
+          { "id": "fist", "label": "Closed fist", "correct": false }
+        ]
+      }
+    ]
+  }
+}
+```
+
+If a lesson has no configured practice questions, the API supplies a basic fallback question. Add lesson-specific questions for meaningful assessment.
+
 The backend exposes learner-facing APIs for published content and progress:
 
 - `GET /api/paths` and `GET /api/paths/<id>` return published paths, lessons, lesson JSON content, lesson image/video URLs, and the signed-in learner's progress.
 - `GET /api/vocabulary` returns published signs; `PUT`/`DELETE /api/vocabulary/<id>/favorite` saves/removes a learner's favorite.
 - `GET /api/scenarios`, `/api/challenges`, and `/api/practice` list published activities by type. `GET /api/activities/<id>` returns one activity.
-- `PUT /api/lessons/<id>/progress` saves an in-progress percentage from 1–99 without decreasing existing progress. `POST /api/lessons/<id>/complete` records 100% completion.
+- `POST /api/lessons/<id>/start` records that a learner opened the lesson. When the video ends, `POST /api/lessons/<id>/complete` saves 50% progress. `POST /api/lessons/<id>/practice/complete` records 100% after all practice answers are correct and the learner confirms they practiced.
+- `PUT /api/lessons/<id>/progress` saves an in-progress percentage from 1–99 without decreasing existing progress.
 - `POST /api/progress/complete` validates submitted answers against the published activity questions and stores a scored attempt.
 - `GET /api/progress` returns activity history, weekly activity counts, earned achievement status, streak, and recent lesson progress. `GET /api/dashboard` returns learner summary metrics.
 
-These APIs require authentication. Content creation and publication are currently done by inserting/updating the PostgreSQL records directly; the app does not provide an admin content editor or fabricate FSL content.
+These APIs require authentication. Admins can manage lesson content, including the `content` JSONB quiz questions, through the admin workspace. Review FSL lesson content with Deaf FSL signers and qualified educators before publishing.
 
 - `GET /api/classrooms` lists the signed-in learner's active classrooms; `POST /api/classrooms/join` joins one using its invite code.
 - Instructor routes create classrooms, add an existing learner account by email, and manage its roster. Learners can also join directly with the shared classroom code.
@@ -229,7 +252,7 @@ The API uses these optional environment variables:
 
 The backend reads these settings from the project-root `.env` file. See [DATABASE_CONNECTION_SETUP.md](DATABASE_CONNECTION_SETUP.md) for detailed local PostgreSQL and Supabase IPv4/IPv6 setup and troubleshooting. See [ENVIRONMENT.md](ENVIRONMENT.md) for all supported database and Google OAuth settings and instructions for generating a session key.
 
-Do not commit secrets. `TALINTURO_DEMO_MODE=false` disables demo role switching. Before public deployment, also use HTTPS with `TALINTURO_COOKIE_SECURE=true`, configure production CORS, and implement production-grade account recovery, authentication protections, and privacy controls. Do not enable secure cookies when testing over plain local HTTP. The camera feature is preview-only and does not recognize signs.
+Do not commit secrets. `TALINTURO_DEMO_MODE=false` disables demo role switching. Before public deployment, also use HTTPS with `TALINTURO_COOKIE_SECURE=true`, configure production CORS, and implement production-grade account recovery, authentication protections, and privacy controls. Do not enable secure cookies when testing over plain local HTTP. Camera practice uses browser-side MediaPipe landmarks for the face, hands, and body; it does not classify signs or upload camera video. First use requires downloading the WebAssembly runtime and model from their configured public hosts.
 
 ## Troubleshooting
 

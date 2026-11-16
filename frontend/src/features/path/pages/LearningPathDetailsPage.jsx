@@ -59,6 +59,7 @@ export function LearningPathDetailsPage({ onNavigate, reducedMotion }) {
         const hasSections = sections.length > 0;
         const hasMaterial = hasSections || Boolean(lesson.video_url);
         const completed = lesson.progress >= 100;
+        const started = lesson.started || lesson.progress > 0;
         const current = !completed && lessons.slice(0, index).every((previous) => previous.progress >= 100);
         const locked = !completed && !current;
         const status = completed ? "completed" : current ? "current" : "locked";
@@ -118,7 +119,7 @@ export function LearningPathDetailsPage({ onNavigate, reducedMotion }) {
               disabled={locked || !hasMaterial}
               onClick={() => onNavigate(`/paths/${pathId}/lessons/${lesson.id}`)}
             >
-              {locked ? "Locked" : hasMaterial ? "Continue" : "Lesson content needed"}
+              {locked ? "Locked" : !hasMaterial ? "Lesson content needed" : completed ? "Restart Lesson" : started ? "Continue" : "Start lesson"}
             </Button>
           </div>
         </m.article>;

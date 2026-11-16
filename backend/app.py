@@ -36,7 +36,7 @@ CLASSROOM_PK = "classroom_id"
 MEMBERSHIP_PK = "membership_id"
 ACHIEVEMENT_PK = "achievement_id"
 LESSON_PUBLISHED_FILTER = "AND l.is_published = TRUE"
-SINGLE_LESSON_PUBLISHED_FILTER = "AND is_published = TRUE"
+SINGLE_LESSON_PUBLISHED_FILTER = "AND l.is_published = TRUE"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.environ.get(
@@ -1061,7 +1061,8 @@ def learning_path_detail(path_id):
         f"""
         SELECT l.{LESSON_PK} AS id, l.title, l.duration_minutes, l.content,
                l.image_url, l.video_url,
-               COALESCE(lp.progress_percent, 0) AS progress
+               COALESCE(lp.progress_percent, 0) AS progress,
+               COALESCE(lp.started_at IS NOT NULL OR lp.progress_percent > 0, FALSE) AS started
         FROM lessons l
         LEFT JOIN lesson_progress lp
           ON lp.lesson_id = l.{LESSON_PK} AND lp.user_id = ?
@@ -1108,16 +1109,107 @@ def complete_lesson(lesson_id):
     db.execute(
         """
         INSERT INTO lesson_progress
-            (user_id, lesson_id, status, progress_percent, started_at, completed_at, updated_at)
-        VALUES(?, ?, 'completed', 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            (user_id, lesson_id, status, progress_percent, started_at, updated_at)
+        VALUES(?, ?, 'in_progress', 50, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id, lesson_id)
-        DO UPDATE SET progress_percent = 100, status = 'completed',
-                      completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        DO UPDATE SET progress_percent = GREATEST(lesson_progress.progress_percent, 50),
+                      status = CASE WHEN lesson_progress.status = 'completed' THEN 'completed' ELSE 'in_progress' END,
+                      started_at = COALESCE(lesson_progress.started_at, CURRENT_TIMESTAMP),
+                      updated_at = CURRENT_TIMESTAMP
         """,
         (session["user_id"], lesson_id),
     )
     db.commit()
-    return jsonify({"success": True, "lesson_id": lesson_id, "progress": 100})
+    saved = db.execute("SELECT progress_percent FROM lesson_progress WHERE user_id = ? AND lesson_id = ?", (session["user_id"], lesson_id)).fetchone()
+    return jsonify({"success": True, "lesson_id": lesson_id, "progress": saved["progress_percent"]})
+
+
+@app.post("/api/lessons/<int:lesson_id>/practice/complete")
+@login_required
+def complete_lesson_practice(lesson_id):
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    lesson = db.execute(
+        f"SELECT l.{LESSON_PK} AS id, l.title, l.content FROM lessons l "
+        f"JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE "
+        f"WHERE l.{LESSON_PK} = ? {SINGLE_LESSON_PUBLISHED_FILTER}", (lesson_id,),
+    ).fetchone()
+    if lesson is None:
+        return json_error("This lesson is not available.", 404)
+    watched = db.execute(
+        "SELECT progress_percent FROM lesson_progress WHERE user_id = ? AND lesson_id = ?",
+        (session["user_id"], lesson_id),
+    ).fetchone()
+    if watched is None or watched["progress_percent"] < 50:
+        return json_error("Finish the lesson video before submitting its practice.", 409)
+    content = lesson["content"] if isinstance(lesson["content"], dict) else {}
+    practice = content.get("practice") if isinstance(content.get("practice"), dict) else {}
+    questions = practice.get("questions") if isinstance(practice.get("questions"), list) else []
+    if not questions:
+        questions = [{"prompt": f"Which lesson did you just practice?", "choices": [
+            {"id": "lesson", "label": lesson["title"], "correct": True},
+            {"id": "review", "label": "A different lesson", "correct": False},
+        ]}]
+    answers = data.get("answers")
+    if data.get("practice_confirmed") is not True:
+        return json_error("Confirm that you practiced the sign before completing this lesson.", 400)
+    if not isinstance(answers, list) or len(answers) != len(questions):
+        return json_error("Answer every practice question before submitting.", 400)
+    correct = 0
+    for question, answer in zip(questions, answers):
+        choices = question.get("choices", []) if isinstance(question, dict) else []
+        if not isinstance(choices, list) or not any(choice.get("id") == answer for choice in choices if isinstance(choice, dict)):
+            return json_error("One or more answers are invalid.", 400)
+        correct += int(any(choice.get("id") == answer and choice.get("correct") is True for choice in choices if isinstance(choice, dict)))
+    score = round(correct * 100 / len(questions)) if questions else 100
+    if score < 100:
+        return jsonify({"success": True, "completed": False, "score": score, "message": "Review the lesson and try again."})
+    db.execute("""
+        INSERT INTO lesson_progress (user_id, lesson_id, status, progress_percent, started_at, completed_at, best_score, updated_at)
+        VALUES (?, ?, 'completed', 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, lesson_id) DO UPDATE SET status = 'completed', progress_percent = 100,
+          completed_at = COALESCE(lesson_progress.completed_at, CURRENT_TIMESTAMP),
+          best_score = GREATEST(COALESCE(lesson_progress.best_score, 0), excluded.best_score), updated_at = CURRENT_TIMESTAMP
+    """, (session["user_id"], lesson_id, score))
+    db.commit()
+    return jsonify({"success": True, "completed": True, "lesson_id": lesson_id, "progress": 100, "score": score})
+
+
+@app.post("/api/lessons/<int:lesson_id>/start")
+@login_required
+def start_lesson(lesson_id):
+    db = get_db()
+    lesson = db.execute(
+        f"""
+        SELECT l.{LESSON_PK} AS id
+        FROM lessons l
+        JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE
+        WHERE l.{LESSON_PK} = ? AND l.is_published = TRUE
+        """,
+        (lesson_id,),
+    ).fetchone()
+    if lesson is None:
+        return json_error("This lesson is not available.", 404)
+    progress = db.execute(
+        """
+        INSERT INTO lesson_progress
+            (user_id, lesson_id, status, progress_percent, started_at, updated_at)
+        VALUES(?, ?, 'in_progress', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, lesson_id)
+        DO UPDATE SET
+            status = CASE
+                WHEN lesson_progress.status = 'completed' OR lesson_progress.progress_percent >= 100
+                    THEN 'completed'
+                ELSE 'in_progress'
+            END,
+            started_at = COALESCE(lesson_progress.started_at, CURRENT_TIMESTAMP),
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING status, progress_percent, started_at
+        """,
+        (session["user_id"], lesson_id),
+    ).fetchone()
+    db.commit()
+    return jsonify({"success": True, "lesson_id": lesson_id, **dict(progress)})
 
 
 @app.get("/api/lessons/<int:lesson_id>")
@@ -1138,7 +1230,26 @@ def lesson_detail(lesson_id):
     ).fetchone()
     if row is None:
         return json_error("This lesson is not available.", 404)
-    return jsonify({"lesson": dict(row)})
+    result = dict(row)
+    content = result.get("content") if isinstance(result.get("content"), dict) else {}
+    practice = content.get("practice") if isinstance(content.get("practice"), dict) else {}
+    questions = practice.get("questions") if isinstance(practice.get("questions"), list) else []
+    if not questions:
+        questions = [{"prompt": "Which lesson did you just practice?", "choices": [
+            {"id": "lesson", "label": result["title"]},
+            {"id": "review", "label": "A different lesson"},
+        ]}]
+    safe_questions = []
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        safe_questions.append({**question, "choices": [
+            {key: value for key, value in choice.items() if key != "correct"}
+            for choice in question.get("choices", []) if isinstance(choice, dict)
+        ]})
+    content["practice"] = {**practice, "questions": safe_questions}
+    result["content"] = content
+    return jsonify({"lesson": result})
 
 
 @app.put("/api/lessons/<int:lesson_id>/progress")
