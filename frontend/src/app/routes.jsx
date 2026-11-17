@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { api } from "@/adapters/http/api";
 import { roleHome } from "@/constants/navigation";
 import { RequireRole } from "./guards/RequireRole";
-import { AdminWorkspace } from "@/features/admin";
+import { AdminWorkspace, SignLabPage } from "@/features/admin";
 import { AuthPage, ForgotPassword, LandingPage, ResetPassword } from "@/features/auth";
 import { ChallengeFeedbackPage, ChallengePage, ActivityResultsPage, ScenarioActivityPage, ScenariosPage } from "@/features/activities";
 import { LearnerClassroomsPage } from "@/features/classroom";
@@ -67,6 +67,7 @@ export function AuthedRoutes({ role, user, setUser, demoMode, settings, setSetti
     <Routes>
       <Route path="/" element={role === "admin" ? <Navigate to="/admin" replace /> : <HomePage user={user} onNavigate={navigate} />} />
       <Route path="/admin" element={<RequireRole role={role} allow="admin"><AdminWorkspace user={user} /></RequireRole>} />
+      <Route path="/admin/sign-lab" element={<RequireRole role={role} allow="admin"><SignLabPage /></RequireRole>} />
 
       {/* Learner */}
       <Route path="/paths" element={<LearningPathsPage onNavigate={navigate} />} />

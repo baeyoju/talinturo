@@ -10,9 +10,15 @@ export function ProgressPage() {
   const [progress, setProgress] = useState(null);
   const [loadError, setLoadError] = useState("");
   useEffect(() => {
-    Promise.all([api("/dashboard"), api("/progress")])
-      .then(([dashboardData, progressData]) => { setDashboard(dashboardData); setProgress(progressData); })
-      .catch((error) => setLoadError(error.message));
+    let active = true;
+    const refresh = () => Promise.all([api("/dashboard"), api("/progress")])
+      .then(([dashboardData, progressData]) => {
+        if (active) { setDashboard(dashboardData); setProgress(progressData); setLoadError(""); }
+      })
+      .catch((error) => { if (active) setLoadError(error.message); });
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("focus", refresh); };
   }, []);
   const weeklyActivity = progress?.weekly_activity || [];
   const maxDailyActivity = Math.max(1, ...weeklyActivity.map((day) => day.completed));
@@ -32,7 +38,7 @@ export function ProgressPage() {
         {weeklyActivity.length ? <div className="large-chart">{weeklyActivity.map((day) => <div key={day.activity_date}><span className="large-chart-bar" style={{ height: `${Math.max(3, (day.completed / maxDailyActivity) * 100)}%` }} /><small>{new Date(`${day.activity_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" })}</small></div>)}</div> : <div className="empty-state"><p>Completed activity will appear here once progress has been saved.</p></div>}
         <p className="chart-caption">Daily totals are calculated from your completed PostgreSQL activity records.</p>
       </section>
-      <section className="panel level-panel"><p className="eyebrow">RECENT ACTIVITY</p><h2>Your completed work</h2>{progress?.events?.length ? <div className="timeline">{progress.events.slice(0, 6).map((event, index) => <div key={`${event.activity}-${event.created_at}-${index}`}><i className={`timeline-dot ${["mint", "peach", "lavender"][index % 3]}`} /><span><strong>{event.activity} · {event.score}%</strong><small>{new Date(event.created_at).toLocaleString()}</small></span></div>)}</div> : <p>No completed activities yet. Publish and complete a practice or scenario activity to begin tracking progress.</p>}</section>
+      <section className="panel level-panel"><p className="eyebrow">RECENT ACTIVITY</p><h2>Your completed work</h2>{progress?.events?.length ? <div className="timeline">{progress.events.slice(0, 6).map((event, index) => <div key={`${event.activity}-${event.created_at}-${index}`}><i className={`timeline-dot ${["mint", "peach", "lavender"][index % 3]}`} /><span><strong>{event.activity} · {event.activity_type === "practice" ? "Practice noted" : event.score == null ? "Completed" : `${event.score}%`}</strong><small>{new Date(event.created_at).toLocaleString()}</small></span></div>)}</div> : <p>No completed activities yet. Publish and complete a practice or scenario activity to begin tracking progress.</p>}</section>
     </div>
     <section className="panel achievement-list">
       <div className="panel-heading"><div><p className="eyebrow">MILESTONES TO CELEBRATE</p><h2>Your badges</h2></div><span className="soft-tag">{earnedAchievements} earned</span></div>

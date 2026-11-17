@@ -22,18 +22,18 @@ The backend process environment takes precedence over values in `.env`, so deplo
 
 The backend always connects to PostgreSQL. For a local server, configure `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD` in `.env`; pgAdmin is the client you use to inspect and manage that server. Alternatively, set `DATABASE_URL` to a PostgreSQL URI. For Supabase, copy the URI from the project's **Connect** dialog. Keep credentials private and URL-encode reserved characters in a URI password.
 
-The schema is in the project-root `talinturo.sql`; apply it to the intended PostgreSQL database using pgAdmin's Query Tool, Supabase SQL Editor, or `psql`. Applying it does not migrate an older schema or populate additional learning content.
+The current schema is [`../sql/talinturo_schema.sql`](../sql/talinturo_schema.sql); apply it to a new empty PostgreSQL database using pgAdmin's Query Tool, Supabase SQL Editor, or `psql`. It creates tables without sample records and does not migrate an older schema.
 
 ## Flask and authentication
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `TALINTURO_SECRET_KEY` | Random per process if unset | Private Flask session signing key. Set a stable value in `.env` so sessions survive backend restarts. |
+| `TALINTURO_SECRET_KEY` | Persistent local key in `backend/instance/session.key` | Private Flask session signing key. Local development creates and reuses an ignored key file; deployments must set the same strong value on every backend worker. |
 | `TALINTURO_DEMO_MODE` | `false` | Enables demo sign-in for demo accounts provisioned in PostgreSQL. |
 | `TALINTURO_COOKIE_SECURE` | `false` | Set to `true` when the backend is served over HTTPS. |
 | `FLASK_DEBUG` | `false` | Enables Flask debug mode. Use only for local development. |
 
-Generate a session key in PowerShell and paste the output into `TALINTURO_SECRET_KEY` in `.env`:
+For deployment, generate a session key in PowerShell and set it as `TALINTURO_SECRET_KEY` in the backend environment:
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"
@@ -54,7 +54,7 @@ Google sign-in is unavailable unless both OAuth credentials are set in `.env`. R
 
 - Never commit `.env`, passwords, OAuth secrets, database credentials, or session keys.
 - `.env.example` contains configuration names and safe defaults only. Put real values in `.env`.
-- Automated API tests require a separate PostgreSQL database configured as `TALINTURO_TEST_DATABASE_URL`; they clear that database's tables before each test. Initialize it with the data-free `talinturo_schema.sql` script.
+- Automated API tests require a separate PostgreSQL database configured as `TALINTURO_TEST_DATABASE_URL`; they clear that database's tables before each test. Initialize it with the data-free `sql/talinturo_schema.sql` script.
 - Before public deployment, disable demo mode, set a private stable session key, use HTTPS and secure cookies, and configure production access controls.
 - The Google OAuth client secret was previously embedded in source code. Treat it as exposed: rotate it in Google Cloud Console and place the replacement only in `.env`.
 
