@@ -41,7 +41,7 @@ export function App() {
     observer.observe(topbar);
     updateSidebarOffset();
     return () => observer.disconnect();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, location.pathname]);
 
   // Close the mobile sidebar after navigating.
   useEffect(() => {
@@ -74,7 +74,7 @@ export function App() {
     "--muted": dark ? "#b1b2b8" : "#807a71",
     "--muted-shadow": "none",
   };
-  const onboardingInProgress = location.pathname === "/profile/setup";
+  const onboardingInProgress = location.pathname === "/profile/setup" || location.pathname === "/profile/setup/complete";
   const shouldReduceMotion = prefersReducedMotion || settings.reducedMotion;
 
   if (authLoading) {
@@ -92,10 +92,10 @@ export function App() {
   }
 
   return (
-    <div ref={workspaceRef} className={`app-shell workspace-shell ${sidebarOpen && !onboardingInProgress ? "navigation-open" : ""}`} data-theme={settings.themeMode} data-reduced-motion={shouldReduceMotion} style={appStyle}>
+    <div ref={workspaceRef} className={`app-shell workspace-shell ${onboardingInProgress ? "onboarding-shell" : ""} ${sidebarOpen && !onboardingInProgress ? "navigation-open" : ""}`} data-theme={settings.themeMode} data-reduced-motion={shouldReduceMotion} style={appStyle}>
       {!onboardingInProgress && <Sidebar open={sidebarOpen} role={role} user={user} currentStreak={currentStreak} />}
       <div className="main-column">
-        <TopBar
+        {!onboardingInProgress && <TopBar
           headerRef={topbarRef}
           user={user}
           role={role}
@@ -108,13 +108,13 @@ export function App() {
           onCloseSidebar={() => setSidebarOpen(false)}
           onSwitchRole={switchRole}
           onSignOut={signOut}
-        />
+        />}
         <LazyMotion features={domAnimation}>
           <PageMotionContext.Provider value={shouldReduceMotion}>
             <AnimatePresence mode="wait">
               <m.main
                 key={location.pathname}
-                className="content"
+                className={onboardingInProgress ? "onboarding-content" : "content"}
                 initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
@@ -136,7 +136,7 @@ export function App() {
             </AnimatePresence>
           </PageMotionContext.Provider>
         </LazyMotion>
-        <Footer />
+        {!onboardingInProgress && <Footer />}
       </div>
       <Toast message={toast} onClose={() => setToast("")} />
       <ConnieLoader active={pendingApiRequests > 0} />

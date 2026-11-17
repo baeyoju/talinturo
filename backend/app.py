@@ -3,7 +3,7 @@ import hmac
 import os
 import re
 import secrets
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -170,6 +170,10 @@ def require_postgres_schema(db):
         "user_achievements",
         "user_preferences",
         "sign_favorites",
+        "user_onboarding",
+        "lesson_xp_rewards",
+        "avatar_purchases",
+        "user_avatars",
     }
     rows = db.execute(
         "SELECT table_name FROM information_schema.tables "
@@ -178,6 +182,10 @@ def require_postgres_schema(db):
     existing_tables = {row["table_name"] for row in rows}
     missing_tables = sorted(required_tables - existing_tables)
     if missing_tables:
+        if set(missing_tables) & {"lesson_xp_rewards", "avatar_purchases", "user_avatars"}:
+            raise RuntimeError("Avatar storage is missing. Apply migrations/004_avatar_shop.sql to the intended database, then restart Flask.")
+        if "user_onboarding" in missing_tables:
+            raise RuntimeError("Onboarding storage is missing. Apply migrations/003_user_onboarding.sql to the intended database, then restart Flask.")
         raise RuntimeError(
             "The PostgreSQL public schema is missing required tables: "
             f"{', '.join(missing_tables)}. Restore talinturo.sql before "
@@ -198,6 +206,10 @@ def require_postgres_schema(db):
         "achievements": {"achievement_id", "slug", "title", "description", "criteria"},
         "user_achievements": {"user_id", "achievement_id", "earned_at", "is_published"},
         "sign_favorites": {"user_id", "sign_id"},
+        "user_onboarding": {"user_id", "birthdate", "daily_goal_minutes", "motivation", "sensory_preference", "classroom_id", "completed_at", "updated_at"},
+        "lesson_xp_rewards": {"user_id", "lesson_id", "xp", "earned_at"},
+        "avatar_purchases": {"user_id", "item_id", "cost", "purchased_at"},
+        "user_avatars": {"user_id", "character", "equipped", "updated_at"},
     }
     column_rows = db.execute(
         "SELECT table_name, column_name FROM information_schema.columns "
@@ -232,6 +244,88 @@ def initialize_database():
     with app.app_context():
         db = get_db()
         require_postgres_schema(db)
+
+
+ONBOARDING_MOTIVATIONS = ("Just for fun!", "Family Communication", "Socializing")
+
+# Server-authoritative catalog: clients cannot choose a price, grant XP or ownership.
+AVATAR_CHARACTERS = ("algwas", "connie", "orange")
+AVATAR_CATALOG = (
+    {"id": "beanie", "name": "Beanie", "slot": "head", "cost": 15},
+    {"id": "glasses", "name": "Glasses", "slot": "eyes", "cost": 15},
+    {"id": "headband", "name": "Headband", "slot": "head", "cost": 15},
+    {"id": "propeller-cap", "name": "Propeller cap", "slot": "head", "cost": 15},
+    {"id": "charm", "name": "Charm", "slot": "charm", "cost": 15},
+)
+
+
+def avatar_state(db, user_id):
+    # One SQL snapshot prevents an inconsistent balance during another tab's purchase.
+    saved = db.execute("""
+        SELECT a.character, a.equipped,
+          COALESCE((SELECT SUM(xp) FROM lesson_xp_rewards WHERE user_id = u.user_id), 0)
+          - COALESCE((SELECT SUM(cost) FROM avatar_purchases WHERE user_id = u.user_id), 0) AS balance,
+          COALESCE((SELECT jsonb_agg(item_id ORDER BY item_id) FROM avatar_purchases WHERE user_id = u.user_id), '[]'::jsonb) AS owned
+        FROM users u LEFT JOIN user_avatars a ON a.user_id = u.user_id WHERE u.user_id = ?
+    """, (user_id,)).fetchone()
+    return {
+        "character": saved["character"] or "algwas",
+        "equipped": saved["equipped"] or {},
+        "owned": saved["owned"],
+        "balance": int(saved["balance"]),
+        "catalog": list(AVATAR_CATALOG),
+        "characters": list(AVATAR_CHARACTERS),
+    }
+def onboarding_today():
+    return datetime.now(timezone(timedelta(hours=8))).date()
+
+
+def validate_onboarding(data):
+    """Validate the complete attempt before making any database changes."""
+    if not isinstance(data, dict):
+        return "Send an onboarding object.", None
+    nickname = data.get("nickname")
+    if not isinstance(nickname, str) or not 1 <= len(nickname.strip()) <= 70:
+        return "Enter a nickname between 1 and 70 characters.", None
+    try:
+        birthday = date.fromisoformat(data.get("birthdate", ""))
+    except (TypeError, ValueError):
+        return "Enter a valid birthdate.", None
+    if birthday > onboarding_today():
+        return "Your birthdate cannot be in the future.", None
+    if type(data.get("daily_goal_minutes")) is not int or data["daily_goal_minutes"] not in (5, 10, 15):
+        return "Choose a daily goal of 5, 10, or 15 minutes.", None
+    if data.get("motivation") not in ONBOARDING_MOTIVATIONS:
+        return "Choose a supported motivation.", None
+    if data.get("sensory_preference") not in ("audio", "haptics"):
+        return "Choose Audio Cues or Haptics Only.", None
+    code = data.get("class_code", "")
+    if not isinstance(code, str) or len(code.strip()) > 100:
+        return "Enter a valid classroom code.", None
+    return None, {**data, "nickname": nickname.strip(), "birthdate": birthday, "class_code": code.strip().upper()}
+
+
+def onboarding_classroom(db, code):
+    return db.execute(
+        "SELECT classroom_id AS id, name, invite_code AS code FROM classrooms "
+        "WHERE upper(invite_code) = ? AND is_active = TRUE FOR SHARE",
+        (code,),
+    ).fetchone()
+
+
+def onboarding_record(db, user_id):
+    row = db.execute(
+        "SELECT o.*, u.name AS nickname, c.name AS classroom_name, c.invite_code AS class_code "
+        "FROM user_onboarding o JOIN users u ON u.user_id = o.user_id "
+        "LEFT JOIN classrooms c ON c.classroom_id = o.classroom_id WHERE o.user_id = ?",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    result = dict(row)
+    for field in ("birthdate", "completed_at", "updated_at"):
+        result[field] = result[field].isoformat()
+    return result
 
 
 def json_error(message, status):
@@ -868,6 +962,60 @@ def update_preferences():
     return jsonify({"preferences": dict(row)})
 
 
+@app.get("/api/avatar")
+@login_required
+def get_avatar():
+    return jsonify({"avatar": avatar_state(get_db(), session["user_id"])})
+
+
+@app.post("/api/avatar/purchases")
+@login_required
+def purchase_avatar_item():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) != {"item_id"}:
+        return json_error("Choose an accessory; its price is set by the server.", 400)
+    item = next((item for item in AVATAR_CATALOG if item["id"] == data["item_id"]), None)
+    if item is None:
+        return json_error("This accessory is not available.", 400)
+    db, user_id = get_db(), session["user_id"]
+    # Credits and purchases share this per-account lock; concurrent tabs cannot overspend.
+    db.execute("SELECT user_id FROM users WHERE user_id = ? FOR UPDATE", (user_id,)).fetchone()
+    current = avatar_state(db, user_id)
+    if item["id"] not in current["owned"]:
+        if current["balance"] < item["cost"]:
+            return json_error("You need more XP to buy this accessory.", 409)
+        db.execute("INSERT INTO avatar_purchases(user_id, item_id, cost) VALUES(?, ?, ?)", (user_id, item["id"], item["cost"]))
+    current = avatar_state(db, user_id)
+    db.commit()
+    return jsonify({"avatar": current})
+
+
+@app.put("/api/avatar")
+@login_required
+def save_avatar():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) != {"character", "equipped"}:
+        return json_error("Choose a character and owned accessories.", 400)
+    character, equipped = data["character"], data["equipped"]
+    if character not in AVATAR_CHARACTERS or not isinstance(equipped, dict):
+        return json_error("Choose an available character and valid accessories.", 400)
+    db, user_id = get_db(), session["user_id"]
+    db.execute("SELECT user_id FROM users WHERE user_id = ? FOR UPDATE", (user_id,)).fetchone()
+    owned = set(avatar_state(db, user_id)["owned"])
+    for slot, item_id in equipped.items():
+        item = next((item for item in AVATAR_CATALOG if item["id"] == item_id), None)
+        if item is None or item["slot"] != slot or item_id not in owned:
+            return json_error("Equip only accessories you own, in their matching slots.", 400)
+    db.execute("""
+        INSERT INTO user_avatars(user_id, character, equipped) VALUES(?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET character = excluded.character,
+          equipped = excluded.equipped, updated_at = CURRENT_TIMESTAMP
+    """, (user_id, character, Jsonb(equipped)))
+    current = avatar_state(db, user_id)
+    db.commit()
+    return jsonify({"avatar": current})
+
+
 @app.get("/api/dashboard")
 @login_required
 def dashboard():
@@ -1164,6 +1312,13 @@ def complete_lesson_practice(lesson_id):
     score = round(correct * 100 / len(questions)) if questions else 100
     if score < 100:
         return jsonify({"success": True, "completed": False, "score": score, "message": "Review the lesson and try again."})
+    user_id = session["user_id"]
+    db.execute("SELECT user_id FROM users WHERE user_id = ? FOR UPDATE", (user_id,)).fetchone()
+    # Re-read after the shared wallet lock; retries/concurrent tabs earn only once.
+    prior = db.execute("SELECT progress_percent FROM lesson_progress WHERE user_id = ? AND lesson_id = ?", (user_id, lesson_id)).fetchone()
+    reward = None
+    if prior is not None and prior["progress_percent"] < 100:
+        reward = db.execute("INSERT INTO lesson_xp_rewards(user_id, lesson_id, xp) VALUES(?, ?, 15) ON CONFLICT DO NOTHING RETURNING xp", (user_id, lesson_id)).fetchone()
     db.execute("""
         INSERT INTO lesson_progress (user_id, lesson_id, status, progress_percent, started_at, completed_at, best_score, updated_at)
         VALUES (?, ?, 'completed', 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
@@ -1172,7 +1327,7 @@ def complete_lesson_practice(lesson_id):
           best_score = GREATEST(COALESCE(lesson_progress.best_score, 0), excluded.best_score), updated_at = CURRENT_TIMESTAMP
     """, (session["user_id"], lesson_id, score))
     db.commit()
-    return jsonify({"success": True, "completed": True, "lesson_id": lesson_id, "progress": 100, "score": score})
+    return jsonify({"success": True, "completed": True, "lesson_id": lesson_id, "progress": 100, "score": score, "xp_earned": reward["xp"] if reward else 0})
 
 
 @app.post("/api/lessons/<int:lesson_id>/start")
@@ -1848,6 +2003,79 @@ def update_profile():
         f"SELECT * FROM users WHERE {USER_PK} = ?", (session["user_id"],)
     ).fetchone()
     return jsonify({"user": public_user(user)})
+
+
+@app.get("/api/onboarding")
+@login_required
+def get_onboarding():
+    return jsonify({"onboarding": onboarding_record(get_db(), session["user_id"])})
+
+
+@app.post("/api/onboarding/classroom")
+@login_required
+def check_onboarding_classroom():
+    """Check the code only; joining happens atomically when Finish is saved."""
+    if session.get("role") != "learner":
+        return json_error("Only learner accounts can join a classroom.", 403)
+    data = request.get_json(silent=True)
+    code = data.get("code") if isinstance(data, dict) else None
+    if not isinstance(code, str) or not 1 <= len(code.strip()) <= 100:
+        return json_error("Enter a valid classroom code.", 400)
+    classroom = onboarding_classroom(get_db(), code.strip().upper())
+    if classroom is None:
+        return json_error("No active classroom uses that code. Check it or choose I'm not enrolled.", 404)
+    return jsonify({"classroom": dict(classroom)})
+
+
+@app.put("/api/onboarding")
+@login_required
+def save_onboarding():
+    error, values = validate_onboarding(request.get_json(silent=True))
+    if error:
+        return json_error(error, 400)
+    db = get_db()
+    classroom = None
+    if values["class_code"]:
+        if session.get("role") != "learner":
+            return json_error("Only learner accounts can join a classroom.", 403)
+        classroom = onboarding_classroom(db, values["class_code"])
+        if classroom is None:
+            return json_error("No active classroom uses that code. Go back to Class Code and check it.", 404)
+    user_id = session["user_id"]
+    try:
+        db.execute("UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (values["nickname"], user_id))
+        db.execute(
+            """INSERT INTO user_onboarding
+                (user_id, birthdate, daily_goal_minutes, motivation, sensory_preference, classroom_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET birthdate = excluded.birthdate,
+                daily_goal_minutes = excluded.daily_goal_minutes, motivation = excluded.motivation,
+                sensory_preference = excluded.sensory_preference, classroom_id = excluded.classroom_id,
+                updated_at = CURRENT_TIMESTAMP""",
+            (user_id, values["birthdate"], values["daily_goal_minutes"], values["motivation"],
+             values["sensory_preference"], classroom["id"] if classroom else None),
+        )
+        db.execute(
+            "INSERT INTO user_preferences(user_id, sound) VALUES(?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET sound = excluded.sound, updated_at = CURRENT_TIMESTAMP",
+            (user_id, values["sensory_preference"] == "audio"),
+        )
+        if classroom:
+            db.execute(
+                "INSERT INTO classroom_memberships(user_id, classroom_id, status, joined_at) "
+                "VALUES(?, ?, 'active', CURRENT_TIMESTAMP) ON CONFLICT(user_id, classroom_id) DO UPDATE "
+                "SET status = 'active', joined_at = COALESCE(classroom_memberships.joined_at, CURRENT_TIMESTAMP)",
+                (user_id, classroom["id"]),
+            )
+        db.commit()
+    except psycopg.Error:
+        db.rollback()
+        raise
+    user = db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    preferences = db.execute(
+        "SELECT theme_mode, sound, reduced_motion, weekly_summary FROM user_preferences WHERE user_id = ?", (user_id,),
+    ).fetchone()
+    return jsonify({"user": public_user(user), "onboarding": onboarding_record(db, user_id), "preferences": dict(preferences)})
 
 
 if __name__ == "__main__":

@@ -11,10 +11,10 @@ import {
   AddStudentsPage, CreateClassroomPage, InstructorClassroomsPage, InstructorHomePage, LearnerDetailsPage, LearnersPage,
 } from "@/features/instructor";
 import { LessonViewerPage } from "@/features/lesson";
-import { ProfileSetupPage } from "@/features/onboarding";
+import { OnboardingWelcomePage, ProfileSetupPage } from "@/features/onboarding";
 import { HomePage, LearningPathDetailsPage, LearningPathsPage } from "@/features/path";
 import { PracticePage } from "@/features/practice";
-import { ProfilePage, SettingsPage } from "@/features/profile";
+import { AvatarPage, ProfilePage, SettingsPage } from "@/features/profile";
 import { ProgressPage } from "@/features/progress";
 import { VocabularyPage } from "@/features/vocabulary";
 
@@ -51,10 +51,16 @@ export function AuthedRoutes({ role, user, setUser, demoMode, settings, setSetti
   };
 
   const finishSetup = async (profile) => {
-    const result = await api("/profile", { method: "PUT", body: JSON.stringify({ name: user.name, ...profile }) });
+    const result = await api("/onboarding", { method: "PUT", body: JSON.stringify(profile) });
+    if (!result.onboarding?.completed_at || !result.user) throw new Error("The server did not confirm that your onboarding was saved. Please try again.");
     setUser(result.user);
     localStorage.setItem("talinturo-name", result.user.name);
-    navigate("/");
+    setSettings(current => {
+      const updated = { ...current, sound: Boolean(result.preferences.sound) };
+      localStorage.setItem("talinturo-settings", JSON.stringify(updated));
+      return updated;
+    });
+    navigate("/profile/setup/complete", { replace: true });
   };
 
   return (
@@ -64,7 +70,7 @@ export function AuthedRoutes({ role, user, setUser, demoMode, settings, setSetti
 
       {/* Learner */}
       <Route path="/paths" element={<LearningPathsPage onNavigate={navigate} />} />
-      <Route path="/paths/:pathId/lessons/:lessonId" element={<LessonViewerPage onNavigate={navigate} />} />
+      <Route path="/paths/:pathId/lessons/:lessonId" element={<LessonViewerPage onNavigate={navigate} user={user} />} />
       <Route path="/paths/:pathId" element={<LearningPathDetailsPage onNavigate={navigate} reducedMotion={settings.reducedMotion} />} />
       <Route path="/vocabulary" element={<VocabularyPage />} />
       <Route path="/practice" element={<PracticePage onToast={onToast} />} />
@@ -87,12 +93,14 @@ export function AuthedRoutes({ role, user, setUser, demoMode, settings, setSetti
 
       {/* Shared */}
       <Route path="/profile" element={<ProfilePage user={user} onSave={saveProfile} />} />
+      <Route path="/profile/avatar" element={<AvatarPage />} />
       <Route path="/settings" element={<SettingsPage settings={settings} setSettings={setSettings} onSave={savePreferences} onToast={onToast} />} />
       <Route path="/help" element={<HelpPage />} />
       <Route path="/login" element={<AuthPage mode="login" onAuth={afterLogin} onToast={onToast} />} />
       <Route path="/instructor/sign-in" element={<Navigate to="/instructor" replace />} />
       <Route path="/signup" element={<AuthPage mode="signup" onAuth={afterSignup} onToast={onToast} />} />
-      <Route path="/profile/setup" element={<ProfileSetupPage onDone={finishSetup} />} />
+      <Route path="/profile/setup" element={<ProfileSetupPage user={user} onDone={finishSetup} />} />
+      <Route path="/profile/setup/complete" element={<OnboardingWelcomePage stage="complete" user={user} onContinue={() => navigate(roleHome(role), { replace: true })} />} />
       <Route path="/forgot-password" element={<ForgotPassword onToast={onToast} />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/welcome" element={<Navigate to="/" replace />} />

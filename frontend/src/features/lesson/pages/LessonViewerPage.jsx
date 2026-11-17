@@ -6,6 +6,10 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { LandmarkCamera } from "@/features/lesson/components/LandmarkCamera";
+import { LessonCameraTransition } from "../components/LessonCameraTransition";
+import { cameraIntroduction } from "../camera-transition";
+import { LessonCompletion } from "../components/LessonCompletion";
+import { lessonCompletion } from "@/features/profile/avatar/avatar-model";
 
 let youtubeApiPromise;
 let vimeoApiPromise;
@@ -96,7 +100,7 @@ function getVideoSource(value) {
   }
 }
 
-export function LessonViewerPage({ onNavigate }) {
+export function LessonViewerPage({ onNavigate, user }) {
   const { pathId, lessonId } = useParams();
   const [lesson, setLesson] = useState(null);
   const [error, setError] = useState("");
@@ -108,7 +112,13 @@ export function LessonViewerPage({ onNavigate }) {
   const [practiceAnswers, setPracticeAnswers] = useState([]);
   const [practiceConfirmed, setPracticeConfirmed] = useState(false);
   const [practiceOpen, setPracticeOpen] = useState(false);
+  const [cameraIntroOpen, setCameraIntroOpen] = useState(false);
   const [practiceFeedback, setPracticeFeedback] = useState("");
+  const [completion, setCompletion] = useState(null);
+  const practicePendingRef = useRef(false);
+  const activeLessonRef = useRef(lessonId);
+  const practiceSessionRef = useRef(0);
+  activeLessonRef.current = lessonId;
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const embedRef = useRef(null);
@@ -120,11 +130,20 @@ export function LessonViewerPage({ onNavigate }) {
     let active = true;
     setLesson(null);
     setError("");
+    setCameraIntroOpen(false);
+    setPracticeOpen(false);
+    setPracticeAnswers([]);
+    setPracticeConfirmed(false);
+    setPracticeFeedback("");
+    setCompletion(null);
+    practicePendingRef.current = false;
+    practiceSessionRef.current++;
+    setSaving(false);
     api(`/lessons/${lessonId}/start`, { method: "POST" })
       .then(() => api(`/lessons/${lessonId}`))
       .then(({ lesson: result }) => { if (active) setLesson(result); })
       .catch((loadError) => { if (active) setError(loadError.message); });
-    return () => { active = false; };
+    return () => { active = false; activeLessonRef.current = null; practiceSessionRef.current++; };
   }, [lessonId]);
 
   const sections = Array.isArray(lesson?.content?.sections) ? lesson.content.sections : [];
@@ -134,6 +153,11 @@ export function LessonViewerPage({ onNavigate }) {
   const videoSource = lesson?.video_url ? getVideoSource(lesson.video_url) : null;
   const practiceQuestions = Array.isArray(lesson?.content?.practice?.questions) ? lesson.content.practice.questions : [];
   const inPractice = practiceOpen;
+  const cameraIntro = cameraIntroduction(lesson);
+  const openPractice = () => {
+    if (cameraIntro) setCameraIntroOpen(true);
+    else setPracticeOpen(true); // No authored introduction: preserve the existing flow.
+  };
 
   useEffect(() => {
     const updateFullscreen = () => setFullscreen(document.fullscreenElement === playerRef.current);
@@ -200,14 +224,22 @@ export function LessonViewerPage({ onNavigate }) {
   }, [videoSource?.id, videoSource?.kind]);
 
   const submitPractice = async () => {
+    if (practicePendingRef.current) return;
+    const submittedLesson = lessonId;
+    const submittedSession = practiceSessionRef.current;
+    const isCurrent = () => activeLessonRef.current === submittedLesson && practiceSessionRef.current === submittedSession;
+    practicePendingRef.current = true;
     setSaving(true);
     setPracticeFeedback("");
     try {
       const result = await api(`/lessons/${lessonId}/practice/complete`, { method: "POST", body: JSON.stringify({ answers: practiceAnswers, practice_confirmed: practiceConfirmed }) });
-      if (result.completed) { setLesson((current) => ({ ...current, progress: 100 })); setPracticeFeedback("Practice complete. Lesson progress saved at 100%."); }
+      if (!isCurrent()) return;
+      const confirmed = lessonCompletion(result, submittedLesson);
+      if (confirmed) { setLesson((current) => ({ ...current, progress: 100 })); setPracticeOpen(false); setCompletion(confirmed); }
+      else if (result.completed) setPracticeFeedback("The server did not confirm the saved result. Please reload the lesson before trying again.");
       else setPracticeFeedback(`${result.message} Score: ${result.score}%.`);
-    } catch (saveError) { setPracticeFeedback(saveError.message); }
-    finally { setSaving(false); }
+    } catch (saveError) { if (isCurrent()) setPracticeFeedback(saveError.message); }
+    finally { if (isCurrent()) { practicePendingRef.current = false; setSaving(false); } }
   };
 
   const toggleFullscreen = async () => {
@@ -223,6 +255,10 @@ export function LessonViewerPage({ onNavigate }) {
   if (!lesson) return <div className="empty-state">Loading lesson...</div>;
 
   return <>
+    {completion && <LessonCompletion result={completion} pathId={pathId} nickname={user?.name} onContinue={() => onNavigate(`/paths/${pathId}`)} />}
+    {cameraIntroOpen && cameraIntro && <LessonCameraTransition message={cameraIntro}
+      onContinue={() => { setCameraIntroOpen(false); setPracticeOpen(true); }}
+      onDismiss={() => setCameraIntroOpen(false)} />}
     <PageTitle eyebrow={lesson.path_title || "LEARNING PATH"} title={lesson.title} description={lesson.description || lesson.content?.description} action={<Button variant="outline" onClick={() => onNavigate(`/paths/${pathId}`)}>Back to path</Button>} />
     {inPractice ? <section className="lesson-practice panel"><p className="eyebrow">PRACTICE - 50% COMPLETE</p><h2>Practice what you learned</h2><div className="lesson-practice-grid"><div className="lesson-quiz">{practiceQuestions.map((question, questionIndex) => <div className="activity-question" key={question.id || questionIndex}><h3>{question.prompt}</h3><div className="choice-grid">{(question.choices || []).map((choice, choiceIndex) => { const choiceId = choice.id ?? choice.label; return <button type="button" className={`choice-card ${practiceAnswers[questionIndex] === choiceId ? "choice-selected" : ""}`} key={choiceId ?? choiceIndex} onClick={() => { setPracticeAnswers((answers) => { const next = [...answers]; next[questionIndex] = choiceId; return next; }); setPracticeFeedback(""); }}><strong>{choice.label}</strong><span aria-hidden="true">{practiceAnswers[questionIndex] === choiceId ? "Selected" : ""}</span></button>; })}</div></div>)}<label className="practice-confirm"><input type="checkbox" checked={practiceConfirmed} onChange={(event) => setPracticeConfirmed(event.target.checked)} /> I practiced the sign using the guide.</label>{practiceFeedback && <p role="status">{practiceFeedback}</p>}{lesson.progress < 100 && <Button disabled={saving || practiceAnswers.length < practiceQuestions.length || practiceAnswers.some((answer) => answer === undefined) || !practiceConfirmed} onClick={submitPractice}>{saving ? "Checking..." : "Submit practice"}</Button>}</div><LandmarkCamera /></div></section> : lesson.video_url ? <div className={`lesson-viewer-layout ${transcriptOpen && hasTranscript ? "transcript-open" : "transcript-closed"}`}>
       <section className="lesson-player-card" ref={playerRef} aria-label="Lesson video player">
@@ -271,7 +307,7 @@ export function LessonViewerPage({ onNavigate }) {
         {sections.map((section, index) => <section className="lesson-transcript-section" key={`${section.title || "section"}-${index}`}><h3>{section.title || `Section ${index + 1}`}</h3><p>{section.body}</p></section>)}
       </aside>}
     </div> : sections.length > 0 ? <div className="lesson-viewer-content">{sections.map((section, index) => <section className="panel" key={`${section.title || "section"}-${index}`}><h2>{section.title || `Section ${index + 1}`}</h2><p>{section.body}</p></section>)}</div> : <div className="empty-state"><Icon name="bookOpen" size={32} /><p>Lesson material is not available yet.</p></div>}
-    {!inPractice && <div className="lesson-viewer-actions">{notice && <p role="status">{notice}</p>}<Button onClick={() => lesson.progress >= 50 ? setPracticeOpen(true) : completeLesson()} disabled={saving || (Boolean(lesson.video_url) && lesson.progress < 50)}>{saving ? "Saving..." : "Proceed to practice"}</Button></div>}
+    {!inPractice && <div className="lesson-viewer-actions">{notice && <p role="status">{notice}</p>}<Button onClick={() => lesson.progress >= 50 ? openPractice() : completeLesson()} disabled={saving || (Boolean(lesson.video_url) && lesson.progress < 50)}>{saving ? "Saving..." : "Proceed to practice"}</Button></div>}
   </>;
 }
 
