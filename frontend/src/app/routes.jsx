@@ -101,7 +101,7 @@ export function AuthedRoutes({ role, user, setUser, demoMode, settings, setSetti
       <Route path="/instructor/sign-in" element={<Navigate to="/instructor" replace />} />
       <Route path="/signup" element={<AuthPage mode="signup" onAuth={afterSignup} onToast={onToast} />} />
       <Route path="/profile/setup" element={<ProfileSetupPage user={user} onDone={finishSetup} />} />
-      <Route path="/profile/setup/complete" element={<OnboardingWelcomePage stage="complete" user={user} onContinue={() => navigate(roleHome(role), { replace: true })} />} />
+      <Route path="/profile/setup/complete" element={<OnboardingWelcomePage stage="complete" user={user} onContinue={() => navigate(role === "learner" ? "/paths" : roleHome(role), { replace: true })} />} />
       <Route path="/forgot-password" element={<ForgotPassword onToast={onToast} />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/welcome" element={<Navigate to="/" replace />} />

@@ -2,12 +2,14 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Icon } from "@/components/ui/Icon";
 import { adminNav, instructorNav, learnerNav } from "@/constants/navigation";
 import { initials } from "@/utils/initials";
+import { PathNavigation } from "@/features/path/components/PathNavigation";
 
 const accountLabel = { admin: "Administrator account", instructor: "Instructor account", learner: "Learner account" };
 
-export function Sidebar({ open, role, user, currentStreak }) {
+export function Sidebar({ open, role, user, currentStreak, pathMap = false }) {
   const navigate = useNavigate();
   const items = role === "admin" ? adminNav : role === "instructor" ? instructorNav : learnerNav;
+  if (pathMap) return <PathNavigation />;
   return (
     <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
       <div className="sidebar-profile">

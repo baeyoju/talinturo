@@ -88,6 +88,18 @@ def main():
                 import app as backend
                 from werkzeug.serving import make_server
                 backend.DATABASE_URL = test_uri
+                path_fixtures = None
+                if "--path" in sys.argv:
+                    # Five synthetic content records ONLY in this disposable DB.
+                    with backend.app.app_context():
+                        db = backend.get_db()
+                        path_id = backend.insert_id(db, "INSERT INTO learning_paths(slug, title, description, level, is_published) VALUES(?, ?, ?, ?, TRUE)", ("path-map-tests", "FAMILY & ME", "Little signs. Everyday connections.", "LEVEL 1"), backend.PATH_PK)
+                        path_fixtures = {"path": path_id, "lessons": []}
+                        for index in range(5):
+                            lesson_id = backend.insert_id(db, "INSERT INTO lessons(path_id, slug, title, duration_minutes, content, is_published) VALUES(?, ?, ?, ?, ?, TRUE)", (path_id, f"path-{index}", "Politely call your father for dinner" if index == 0 else f"API lesson fixture {index + 1}", "1:00", backend.Jsonb({"sections": [{"title": "Test material", "body": "Disposable test only, not approved FSL lesson content."}]})), backend.LESSON_PK)
+                            path_fixtures["lessons"].append(lesson_id)
+                        path_fixtures["empty"] = backend.insert_id(db, "INSERT INTO learning_paths(slug, title, level, is_published) VALUES(?, ?, ?, TRUE)", ("empty-path-tests", "Empty path fixture", "LEVEL 1"), backend.PATH_PK)
+                        db.commit()
                 camera_fixtures = None
                 if "--camera-intro" in sys.argv or "--avatar" in sys.argv:
                     # Only this run's disposable database; never seed application lessons.
@@ -119,6 +131,10 @@ def main():
                 thread = Thread(target=server.serve_forever, daemon=True)
                 thread.start()
                 env = {**os.environ, "TALINTURO_BROWSER_API_URL": f"http://127.0.0.1:{server.server_port}"}
+                if "--auth" in sys.argv:
+                    env["TALINTURO_AUTH_ONLY"] = "1"
+                if path_fixtures:
+                    env["TALINTURO_PATH_TEST_IDS"] = json.dumps(path_fixtures)
                 if camera_fixtures:
                     env["TALINTURO_CAMERA_TEST_IDS"] = json.dumps(camera_fixtures)
                     if "shop" in camera_fixtures:

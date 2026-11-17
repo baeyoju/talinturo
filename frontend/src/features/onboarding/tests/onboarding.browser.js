@@ -100,6 +100,19 @@ try {
     for (const frame of feet) { assert.equal(frame.x, 0); assert.equal(frame.y, 0); assert.ok(Math.abs(frame.bottom - feet[0].bottom) < .1, 'Breathing feet stay anchored'); }
   };
   await cdp('Page.enable'); await cdp('Runtime.enable');
+  if (process.env.TALINTURO_AUTH_ONLY === '1') {
+    const { verifyAuth } = await import('../../auth/tests/auth.browser.js');
+    const auth = await verifyAuth({ cdp, evaluate, until, navigate, input, click, screenshot, wait });
+    assert.deepEqual(errors, [], 'No uncaught browser errors during auth checks');
+    await writeFile(join(artifacts, 'auth-results.json'), JSON.stringify({ auth, errors }, null, 2));
+    console.log(`PASS: focused Login/Signup browser acceptance. Screenshots and measurements: ${artifacts}`);
+  } else if (process.env.TALINTURO_PATH_TEST_IDS) {
+    const { verifyPath } = await import('../../path/tests/path.browser.js');
+    const path = await verifyPath({ cdp, evaluate, until, navigate, click, screenshot, wait, fixtures: JSON.parse(process.env.TALINTURO_PATH_TEST_IDS) });
+    assert.deepEqual(errors, [], 'No uncaught browser errors during Path checks');
+    await writeFile(join(artifacts, 'path-results.json'), JSON.stringify({ path, errors }, null, 2));
+    console.log(`PASS: focused Path browser acceptance. Screenshots and measurements: ${artifacts}`);
+  } else {
   await navigate('/login');
   assert.equal(await evaluate(`fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'learner@example.com',password:'safe-password'})}).then(r=>r.status)`), 200);
   await navigate('/profile/setup');
@@ -165,7 +178,7 @@ try {
   await click('.onboarding-welcome__continue');
   await until("document.querySelector('.onboarding-welcome__bubble')?.textContent.includes('Welcome to TALINTURO, Josh Onboarding,')", 'retry reloads the saved nickname');
   await click('.onboarding-welcome__continue');
-  await until("location.pathname === '/' && !document.querySelector('.onboarding-page')", 'final welcome action opens dashboard');
+  await until("location.pathname === '/paths' && !document.querySelector('.onboarding-page')", 'final welcome action opens Path');
   await evaluate("fetch('/api/auth/logout',{method:'POST'})");
   assert.equal(await evaluate(`fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'learner@example.com',password:'safe-password'})}).then(r=>r.status)`), 200);
   await navigate('/profile/setup');
@@ -185,7 +198,7 @@ try {
   await click('.onboarding-continue');
   await until("location.pathname === '/profile/setup/complete' && document.querySelector('.onboarding-welcome__bubble')?.textContent.includes('Josh Onboarding')", 'skip-classroom flow saves before final welcome');
   await click('.onboarding-welcome__continue');
-  await until("location.pathname === '/' && !document.querySelector('.onboarding-page')", 'second final welcome returns to dashboard');
+  await until("location.pathname === '/paths' && !document.querySelector('.onboarding-page')", 'second final welcome opens Path');
   const preferences = await evaluate("fetch('/api/preferences').then(r=>r.json())");
   assert.equal(preferences.preferences.sound, true);
 
@@ -193,20 +206,20 @@ try {
   // Successful Login keeps Dashboard; new Signup enters the setup welcome.
   await evaluate("fetch('/api/auth/logout',{method:'POST'})");
   await navigate('/login');
-  await until("Boolean(document.querySelector('.auth-card form input[type=\"email\"]'))", 'login form ready');
-  await input('.auth-card input[type="email"]', 'learner@example.com');
-  await input('.auth-card input[type="password"]', 'safe-password');
-  await click('.auth-card form button[type="submit"]');
-  await until("location.pathname === '/' && !document.querySelector('.auth-card')", 'learner Login opens dashboard');
+  await until("Boolean(document.querySelector('.fsl-auth form input[type=\"email\"]'))", 'login form ready');
+  await input('#auth-email', 'learner@example.com');
+  await input('#auth-password', 'safe-password');
+  await click('.fsl-auth form button[type="submit"]');
+  await until("location.pathname === '/' && !document.querySelector('.fsl-auth')", 'learner Login opens dashboard');
   assert.equal(await evaluate("Boolean(document.querySelector('.onboarding-welcome'))"), false, 'Login does not repeat onboarding');
 
   await evaluate("fetch('/api/auth/logout',{method:'POST'})");
   await navigate('/signup');
-  await until("Boolean(document.querySelector('.auth-card input[autocomplete=\"name\"]'))", 'signup form ready');
-  await input('.auth-card input[autocomplete="name"]', 'New Onboarding Learner');
-  await input('.auth-card input[type="email"]', 'onboarding-browser-signup@example.com');
-  await input('.auth-card input[type="password"]', 'safe-password');
-  await click('.auth-card form button[type="submit"]');
+  await until("Boolean(document.getElementById('auth-confirmation'))", 'signup form ready');
+  await input('#auth-email', 'onboarding-browser-signup@example.com');
+  await input('#auth-password', 'safe-password');
+  await input('#auth-confirmation', 'safe-password');
+  await click('.fsl-auth form button[type="submit"]');
   await until("location.pathname === '/profile/setup' && document.querySelector('.onboarding-welcome')?.dataset.welcome === 'setup'", 'new Signup opens setup welcome');
   assert.equal((await evaluate("fetch('/api/onboarding').then(r=>r.json())")).onboarding, null, 'Signup alone does not mark onboarding complete');
   await navigate('/profile/setup/complete');
@@ -215,7 +228,7 @@ try {
   // Do not click a transient outgoing instance before the destination mounts.
   await wait(500);
   await click('.onboarding-welcome__continue');
-  await until("document.getElementById('onboarding-nickname')?.value === 'New Onboarding Learner'", 'ready action opens new account nickname step');
+  await until("document.getElementById('onboarding-nickname')?.value === 'Learner'", 'ready action opens temporary-name nickname step');
   let cameraTransition = null;
   if (process.env.TALINTURO_CAMERA_TEST_IDS) {
     const { verifyCameraTransition } = await import('../../lesson/tests/camera-transition.browser.js');
@@ -232,6 +245,7 @@ try {
   if (avatarResults) console.log('PASS: avatar shop, first-completion XP, repeat reward rejection, real purchase/save/unequip, three mascots at five widths, attached breathing, reduced motion and completion screens.');
   if (cameraTransition) console.log('PASS: camera intros, 7 compact layouts, focus/Escape, per-lesson copy, missing-copy fallback, camera permission error and unchanged progress; physical camera not tested.');
   console.log(`PASS: 7 steps × 5 widths and 2 compact welcomes × 8 viewport configurations; real persistence, save/read outage recovery, actual Login/Signup navigation, unfinished-account guard, exact welcome artwork, anchored breathing and reduced motion. Screenshots: ${artifacts}`);
+  }
 } finally {
   socket?.close();
   if (browser && browser.exitCode === null) { browser.kill(); await Promise.race([new Promise(resolve => browser.once('exit', resolve)), wait(5000)]); }

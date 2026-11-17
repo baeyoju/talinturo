@@ -1,5 +1,11 @@
 # Onboarding and mascot integration — November 17, 2026
 
+> Current navigation update (November 18): the final saved-onboarding welcome now
+> opens **Path (`/paths`)**, per the developer's latest decision. Normal Login
+> still opens Dashboard. Older Dashboard-after-onboarding notes below describe
+> the previous checkpoint. See [PATH_MAP.md](PATH_MAP.md) for the five-circle Path,
+> API integration, tests, approved missing-content spaces and backend limitations.
+
 ## Scope and design
 
 Working React + Flask/PostgreSQL onboarding at `/profile/setup`:
@@ -342,3 +348,83 @@ No XP is retroactively added to old completed lessons and no star rewards are
 invented. Existing combined quiz/camera remains; a separate Watch/Learn/Sign redesign
 is not yet implemented. Connie and Orange have their supplied idle artwork, not
 invented celebration expressions. No commit or push was made.
+
+## Login / Signup alignment — current handoff
+
+Updated design source: Figma `f9Frea5LnNoBccqGk04kiQ`, white Desktop Login
+`723:1951` and Signup `723:1957`. Both now include Google buttons. Inspected mobile
+references `234:314` / `234:352` still omit Google; the responsive implementation
+keeps the current desktop Google action available on small screens as well.
+
+- Preview: `http://127.0.0.1:5173/login` and `http://127.0.0.1:5173/signup`.
+  Sign out first to view them without authenticated workspace navigation.
+- Replaced learner marketing headings/panel/logo with the white form card,
+  Algwas greeting bubble, gray shadow, blue depth action, Figma field labels,
+  switch links, divider and white Google action. Instructor sign-in, the marketing
+  landing page, password-reset pages and backend auth contracts are unchanged.
+- Signup has Email, Password and Confirm Password, not an extra name field.
+  Explicit user decision: create the real database account with temporary name
+  **Learner**; existing onboarding replaces it with the saved nickname. Confirmation
+  is checked locally and is not sent to the backend. Login opens Dashboard;
+  Signup opens the existing setup welcome. No fake authentication or completion.
+- Exact local Figma SVGs retain their intrinsic 292.645 × 372.602 dimensions.
+  Separate wrappers scale them to about 190px tall on desktop / 160px on mobile,
+  preserving the user's compact-mascot requirement rather than the large artboard
+  character size. Uses existing `onboarding-breathe` (3.6s), bottom anchored,
+  with OS/app reduced-motion overrides. No existing animation keyframes changed.
+- Responsive form: desktop side-by-side, small screens stacked without the desktop
+  card border. Short desktop viewports use 56px instead of 70px fields; mobile
+  fields stay 50px with readable 16px input text. These are deliberate responsive
+  adaptations, not a claim of fixed-artboard pixel identity at every viewport.
+- Failed requests remain on the form with a real error; no fabricated success.
+  Duplicate submissions are blocked; switching routes clears credentials/errors
+  and aborts the old request. Google retains the existing `/api/auth/google`
+  redirect and health preflight. Actual provider consent requires manual testing
+  with the team's OAuth configuration; an absent configuration is not supplied here.
+
+Implementation files:
+
+- `frontend/src/features/auth/pages/AuthPage.jsx` (learner/instructor dispatch)
+- `frontend/src/features/auth/pages/LearnerAuthPage.jsx`
+- `frontend/src/features/auth/auth-model.js`
+- `frontend/src/features/auth/styles/auth.css`
+- `frontend/src/assets/mascots/auth-login.svg`, `auth-signup.svg`
+
+Verification files: `frontend/src/features/auth/tests/auth.test.js`,
+`auth.browser.js`; existing onboarding browser runner updated for the new fields,
+with a focused auth-only branch. `backend/verify_onboarding.py --auth` selects that
+branch; production Python code is unchanged. No packages or database migrations added.
+
+Reproduce from the repo root (the Python helper uses disposable test databases):
+
+```powershell
+cd frontend
+node --test src/features/auth/tests/auth.test.js src/features/onboarding/tests/onboarding.test.js src/features/lesson/tests/camera-transition.test.js src/features/profile/avatar/tests/avatar.test.js
+npm run build
+cd ..
+.\backend\.venv\Scripts\python.exe backend\verify_onboarding.py --browser-only --auth
+.\backend\.venv\Scripts\python.exe backend\verify_onboarding.py --onboarding-only
+.\backend\.venv\Scripts\python.exe backend\verify_onboarding.py --avatar-only
+```
+
+Focused browser acceptance covers 12 layouts (two pages × 320/393/768/1366/1440/1920px),
+local SVGs/proportions, compact anchored breathing, reduced motion, real learner and
+instructor Login, real Signup, temporary name and saved nickname persistence,
+confirmation mismatch, duplicate email, API/Google preflight outages, stale route
+responses and double-submit protection. Screenshots/results are printed in the
+runner's temporary artifact folder, not committed. Headless Chromium testing is
+not physical-device or actual Google-account validation.
+
+Actual results for this batch: **31/31 focused Node tests passed**, **12/12 onboarding
+API and 12/12 avatar API tests passed**, focused auth browser run passed with no
+uncaught browser errors, `npm run build` passed (580 modules; existing large-chunk
+warning), JavaScript syntax checks and `git diff --check` passed. Desktop and mobile
+screenshots were visually reviewed. Test-created accounts were confined to the
+helper's disposable databases, which were removed after each run.
+
+The previously observed full-suite welcome vertical-overflow failure at 320 × 900
+remains deferred at the user's request. The auth-only browser run does **not** assert
+that this older failure is fixed; do not report the full onboarding browser suite
+as green based on it. Existing build chunk-size warnings also remain outside scope.
+No camera, recognition, scenario, mascot reaction, XP or roadmap changes.
+No automatic commit or push.

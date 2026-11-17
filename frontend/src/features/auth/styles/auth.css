@@ -1,0 +1,54 @@
+/* Figma f9Frea5LnNoBccqGk04kiQ / 723:1951 and 723:1957.
+   Learner-only selectors leave the instructor/reset/landing screens untouched. */
+.app-shell.public-shell:has(.fsl-auth) { background: #fff; }
+.fsl-auth { min-height: 100svh; width: 100%; display: grid; place-items: center; padding: 48px 24px; background: #fff; color: #393939; text-shadow: none; font: 400 16px/24px "Open Sans", sans-serif; }
+.fsl-auth__layout { width: min(100%, 1112px); display: grid; grid-template-columns: 385px minmax(0, 695px); gap: 32px; align-items: center; justify-content: center; }
+.fsl-auth__mascot { --auth-art-scale: .5; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.fsl-auth__bubble { position: relative; width: 252px; min-height: 90px; display: grid; place-items: center; margin: 0 0 42px; padding: 24px; border: 3px solid #b0b0b0; border-radius: 15px; background: #fff; color: #616161; font: 500 20px/28px "Fredoka", sans-serif; text-align: center; }
+.fsl-auth__bubble::after { content: ""; position: absolute; bottom: -15px; left: calc(50% - 15px); width: 26px; height: 26px; border-right: 3px solid #b0b0b0; border-bottom: 3px solid #b0b0b0; background: #fff; transform: rotate(45deg); }
+/* Layout scale is separate from the existing anchored 3.6s breathing transform.
+   SVG intrinsic dimensions are preserved, never stretched to a new aspect ratio. */
+.fsl-auth__art { width: calc(292.645px * var(--auth-art-scale)); height: calc(372.602px * var(--auth-art-scale)); }
+.fsl-auth__scale { width: 292.645px; height: 372.602px; transform: scale(var(--auth-art-scale)); transform-origin: top left; }
+.fsl-auth__breathing { width: 292.645px; height: 372.602px; transform-origin: bottom center; animation: onboarding-breathe 3.6s ease-in-out infinite; }
+.fsl-auth__breathing img { display: block; max-width: none; user-select: none; }
+.fsl-auth__shadow { width: calc(224px * var(--auth-art-scale)); height: calc(12px * var(--auth-art-scale)); border-radius: 15px; background: #b0b0b0; }
+.fsl-auth__card { width: 100%; min-width: 0; padding: 32px; border: 1px solid #b0b0b0; border-radius: 24px; background: #fff; box-shadow: 0 2px 0 #0004; }
+.fsl-auth--signup .fsl-auth__card { border-radius: 32px; }
+.fsl-auth__card form { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.fsl-auth__card label { display: flex; flex-direction: column; gap: 6px; font: inherit; }
+.fsl-auth__card input { width: 100%; min-width: 0; height: 70px; padding: 10px 16px; border: 1px solid #b0b0b0; border-radius: 12px; color: #393939; background: #fff; box-shadow: none; font: inherit; }
+.fsl-auth__card input::placeholder { color: #888; opacity: 1; }
+.fsl-auth__card input[type="email"]::placeholder { color: #b0b0b0; }
+.fsl-auth__card a { color: #1a3fbf; text-decoration: underline; text-underline-offset: 2px; }
+.fsl-auth__card :is(a, button, input):focus-visible { outline: 3px solid #1a3fbf; outline-offset: 3px; }
+.fsl-auth__forgot { min-height: 52px; margin: 0; padding-bottom: 24px; text-align: right; }
+.fsl-auth--signup .fsl-auth__forgot { min-height: 64px; }
+.app-shell .fsl-auth .button { width: 100%; min-height: 48px; margin: 0; border-radius: 16px; transition: background-color .15s, box-shadow .15s; transform: none; letter-spacing: normal; }
+.app-shell .fsl-auth .fsl-auth__submit { height: 60px; padding: 14px 20px; border: 0; background: #1a3fbf; color: #fff; box-shadow: 0 4px 0 #112670; font: 600 18px/24px "Fredoka", sans-serif; }
+.app-shell .fsl-auth .fsl-auth__submit:hover { background: #153299; }
+.fsl-auth__switch { margin: 0; text-align: center; overflow-wrap: anywhere; }
+.fsl-auth__alternative { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.fsl-auth--signup .fsl-auth__alternative { margin-top: 16px; }
+.fsl-auth__divider { display: flex; align-items: center; gap: 12px; text-align: center; }
+.fsl-auth__divider::before, .fsl-auth__divider::after { content: ""; height: 1px; flex: 1; background: #b0b0b0; }
+.fsl-auth__divider span { width: 48px; }
+.app-shell .fsl-auth .fsl-auth__google { height: 52px; padding: 14px 20px; border: 1px solid #b0b0b0; background: #fff; color: #616161; box-shadow: 0 4px 0 #b7b7b7; font: 700 14px/20px "Open Sans", sans-serif; }
+.app-shell .fsl-auth .fsl-auth__google:hover { background: #f7f7f7; }
+.fsl-auth__error { margin: 0; color: #a02323; overflow-wrap: anywhere; }
+@media (max-width: 1100px) { .fsl-auth__layout { grid-template-columns: minmax(210px, 300px) minmax(0, 695px); gap: 24px; } }
+@media (max-height: 900px) and (min-width: 701px) { .fsl-auth { padding-block: 32px; } .fsl-auth__card input { height: 56px; } .fsl-auth__forgot, .fsl-auth--signup .fsl-auth__forgot { min-height: 40px; padding-bottom: 12px; } }
+@media (max-width: 700px) {
+  .fsl-auth { padding: 32px 16px; }
+  .fsl-auth__layout { max-width: 480px; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .fsl-auth__mascot { --auth-art-scale: .43; }
+  .fsl-auth__bubble { width: 170px; min-height: 60px; margin-bottom: 32px; padding: 12px; border-width: 2px; border-radius: 10px; font-size: 14px; line-height: 20px; }
+  .fsl-auth__bubble::after { width: 18px; height: 18px; left: calc(50% - 10px); bottom: -11px; border-width: 2px; }
+  .fsl-auth__card, .fsl-auth--signup .fsl-auth__card { padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .fsl-auth__card input { height: 50px; }
+  .fsl-auth__forgot, .fsl-auth--signup .fsl-auth__forgot { min-height: 40px; padding-bottom: 12px; font-size: 14px; }
+  .fsl-auth__switch { font-size: 14px; }
+  .app-shell .fsl-auth .fsl-auth__submit { height: 52px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .fsl-auth__breathing { animation: none; } .app-shell .fsl-auth .button { transition: none; } }
+[data-reduced-motion="true"] .fsl-auth__breathing { animation: none; }

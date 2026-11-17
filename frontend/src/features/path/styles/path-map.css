@@ -1,0 +1,94 @@
+/* Figma shapes/assets, compact web sizing. One scroll owner at the far right;
+   the fixed navigation and sticky activity panel never create a center scrollbar. */
+.app-shell.workspace-shell.path-shell { --path-sidebar: 208px; height: 100svh; min-height: 0; overflow: hidden; background: #fff; color: #393939; text-shadow: none; font-family: "Open Sans", sans-serif; }
+.workspace-shell.path-shell::before { display: none; }
+.workspace-shell.path-shell .main-column { margin-left: var(--path-sidebar); width: calc(100% - var(--path-sidebar)); height: 100%; min-height: 0; }
+.path-content { flex: 1; height: 100%; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.workspace-shell.path-shell .path-navigation { position: fixed; inset: 0 auto 0 0; width: var(--path-sidebar); height: 100svh; padding: 24px 16px; border: 0; border-right: 1px solid #e5e5e5; background: #fff; box-shadow: none; transform: none; visibility: visible; transition: none; z-index: 10; overflow-y: auto; }
+.path-navigation__brand { display: block; margin-bottom: 28px; color: #1a3fbf; font: 700 26px/32px "Fredoka", sans-serif; }
+.path-navigation nav { display: grid; gap: 8px; }
+.path-navigation nav a { min-height: 46px; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1.5px solid transparent; border-radius: 12px; color: #616161; font: 600 14px/20px "Fredoka", sans-serif; }
+.path-navigation nav a.is-active { color: #1a3fbf; background: #d1d9f2; border-color: #1a3fbf; }
+.path-navigation img { display: block; flex: none; max-width: none; transform: scale(.833333); }
+.path-screen { display: grid; grid-template-columns: minmax(0, 1fr) 224px; align-items: start; gap: 28px; width: 100%; min-height: 100%; padding: 28px; margin-inline: auto; background: #fff; }
+.path-scroll { min-width: 0; width: 100%; overflow: visible; padding: 0; }
+.path-scenario-header { display: flex; align-items: center; gap: 16px; min-height: 108px; padding: 18px 20px; border-radius: 16px; background: #f66233; color: #fff; }
+.path-scenario-header > div:first-child { flex: 1; min-width: 0; }
+.path-scenario-header p { margin: 0; font-size: 12px; line-height: 18px; }
+.path-scenario-header h1 { margin: 2px 0; font: 700 30px/36px "Fredoka", sans-serif; overflow-wrap: anywhere; text-transform: uppercase; }
+.path-scenario-header p:last-child { font-size: 12px; line-height: 18px; }
+.path-family-icon { width: 56px; height: 56px; flex: none; }
+.path-family-icon img { display: block; max-width: none; transform: scale(.56); transform-origin: top left; }
+.path-notice { margin: 16px 0 0; max-width: 480px; color: #616161; font-size: 12px; line-height: 18px; }
+/* Fixed space above the first circle keeps its popover clear of the header.
+   It is reserved even with every card closed, so hovering causes no movement. */
+.path-map { position: relative; width: 100%; max-width: 760px; margin-inline: auto; padding: 180px 0 64px; }
+.path-map > ol { list-style: none; margin: 0; padding: 0; }
+/* Popovers overlay the map; opening one must never resize or move lesson rows. */
+.path-stop { --node-offset: 20px; position: relative; display: grid; place-items: start center; width: 100%; height: 176px; padding-top: 8px; }
+.path-stop:nth-child(2) { --node-offset: -40px; }.path-stop:nth-child(3) { --node-offset: -64px; }.path-stop:nth-child(4) { --node-offset: -20px; }.path-stop:nth-child(5) { --node-offset: 40px; }
+.path-node { position: relative; display: grid; place-items: center; width: 96px; height: 92px; padding: 0; border: 0; border-radius: 50%; background: transparent; transform: translateX(var(--node-offset)); cursor: pointer; }
+.path-node__ring { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, #f6d656 var(--lesson-progress), #ede6db 0); }
+.path-node__ring::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: #fff; }
+.path-node__face { position: relative; display: grid; place-items: center; width: 72px; height: 60px; border-radius: 40px; background: #f66233; box-shadow: 0 7px 0 #a84123; transition: transform .12s, box-shadow .12s; }
+.path-node__face img { display: block; max-width: none; transform: scale(.66); }
+.path-stop--completed .path-node__face img { transform: scale(-.7, .7); }
+.path-node:hover .path-node__face { box-shadow: 0 7px 0 #a84123, inset 0 2px 0 #ffffff4d; }
+.path-stop--locked .path-node { width: 76px; height: 76px; }
+.path-stop--locked .path-node__ring { display: none; }
+.path-stop--locked .path-node__face { width: 74px; height: 66px; background: #e5e5e5; box-shadow: 0 5px 0 #929292; }
+.path-stop--locked .path-node__face img { transform: scale(.56); }
+.path-stop--locked .path-node:hover .path-node__face { transform: none; }
+.path-node:focus-visible, .path-navigation a:focus-visible { outline: 3px solid #1a3fbf; outline-offset: 4px; }
+.path-stop[data-open="true"] { z-index: 3; }
+.path-lesson-card { position: absolute; bottom: calc(100% + 4px); left: 50%; width: min(320px, 100%); padding: 16px; border-radius: 16px; background: #f66233; color: #fff; transform: translateX(-50%); z-index: 4; }
+.path-lesson-card::before { content: ""; position: absolute; bottom: -8px; left: clamp(20px, calc(50% + var(--node-offset) - 10px), calc(100% - 40px)); width: 20px; height: 20px; background: #f66233; transform: rotate(45deg); }
+/* Transparent bridge keeps the card open while the pointer crosses to Start. */
+.path-lesson-card::after { content: ""; position: absolute; top: 100%; left: 0; width: 100%; height: 16px; }
+.path-lesson-card h2 { position: relative; margin: 0 0 4px; color: #fff; font: 700 14px/20px "Fredoka", sans-serif; overflow-wrap: anywhere; }
+.path-lesson-card p { margin: 0 0 10px; font-size: 12px; line-height: 16px; }
+.path-lesson-card .path-lesson-card__reason { font-size: 11px; line-height: 16px; margin-top: -2px; margin-bottom: 10px; }
+.app-shell .path-lesson-card .button { display: flex; justify-content: center; width: 100%; min-height: 44px; margin: 0; padding: 10px 12px; border: 1px solid #b0b0b0; border-radius: 10px; background: #fff; color: #f66233; box-shadow: 0 3px 0 #b7b7b7; font: 700 12px/18px "Open Sans", sans-serif; transform: none; }
+.app-shell .path-lesson-card .button:disabled { opacity: 1; color: #767676; cursor: not-allowed; }
+.app-shell .path-lesson-card .button:hover:not(:disabled) { background: #fff4ef; }
+.path-companion { position: absolute; top: 300px; right: 2%; pointer-events: none; }
+.path-hud { position: sticky; top: 28px; min-width: 0; padding: 0; overflow: visible; align-self: start; }
+.path-hud__stats { display: flex; justify-content: space-between; gap: 8px; }
+.path-hud__stats > span { display: flex; align-items: center; justify-content: center; gap: 4px; flex: 1; min-width: 0; height: 40px; padding: 6px; border: 1px solid #f66233; border-radius: 100px; color: #393939; font: 700 13px/20px "Open Sans", sans-serif; }
+.path-hud__stats > span:nth-child(2) { border-color: #f3c730; }.path-hud__stats > span:nth-child(3) { border-color: #153299; }
+.path-hud__stats img { display: block; max-width: none; flex: none; }
+.path-hud__streak h2 { margin: 22px 0 8px; color: #153299; font: 500 15px/22px "Fredoka", sans-serif; }
+.path-hud__streak > div { padding: 12px; border: 1px solid #d7d7d7; border-radius: 12px; }
+.path-hud__streak p { margin: 0 0 12px; color: #69645c; font-size: 12px; line-height: 18px; }
+.path-hud__streak ol { list-style: none; margin: 0; padding: 0; display: flex; justify-content: space-between; gap: 4px; }
+.path-hud__streak li { display: flex; flex-direction: column; align-items: center; gap: 7px; font: 600 11px/16px "Fredoka", sans-serif; color: #b0b0b0; }
+.path-hud__streak li > span:last-child { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #e5e5e5; }
+.path-hud__streak li[data-active="true"] { color: #1a3fbf; }.path-hud__streak li[data-active="true"] > span:last-child { background: #1a3fbf; color: #fff; }
+@media (max-width: 1400px) and (min-width: 801px) { .path-companion { transform: scale(.8); transform-origin: top right; } }
+@media (max-width: 1100px) and (min-width: 801px) {
+  .path-screen { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 24px; }
+  .path-hud { position: static; grid-row: 1; width: min(100%, 280px); justify-self: end; }.path-hud__streak { display: none; }
+  .path-scroll { grid-row: 2; }
+}
+@media (max-width: 800px) {
+  .workspace-shell.path-shell .main-column { margin-left: 0; width: 100%; }
+  .workspace-shell.path-shell .path-navigation { inset: auto 0 0; width: 100%; height: calc(72px + env(safe-area-inset-bottom)); padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); overflow: visible; border: 0; border-top: 1px solid #e5e5e5; }
+  .path-navigation__brand { display: none; }.path-navigation nav { display: flex; gap: 8px; justify-content: space-between; }
+  .path-navigation nav a { min-width: 0; min-height: 48px; flex: 1; padding: 2px; border: 0; border-radius: 0; display: flex; flex-direction: column; gap: 4px; font: 400 10px/14px "Open Sans", sans-serif; }
+  .path-navigation nav a.is-active { background: #fff; border: 0; }
+  .path-navigation img { transform: none; }
+  .path-content { flex: none; height: calc(100svh - 72px - env(safe-area-inset-bottom)); }
+  .path-screen { display: flex; flex-direction: column; min-height: 100%; padding: 20px 16px 32px; gap: 20px; max-width: 600px; }
+  .path-hud { order: -1; position: static; width: 100%; }.path-hud__streak { display: none; }
+  .path-hud__stats { max-width: 320px; margin: auto; gap: 16px; }.path-hud__stats > span { height: 38px; max-width: 100px; }
+  .path-scenario-header { min-height: 96px; padding: 16px; border-radius: 14px; box-shadow: 0 4px 0 #cc522b; }
+  .path-scenario-header h1 { font-size: 26px; line-height: 32px; }.path-scenario-header p, .path-scenario-header p:last-child { font-size: 11px; line-height: 16px; }
+  .path-family-icon { width: 44px; height: 44px; }.path-family-icon img { transform: scale(.44); }
+  .path-stop { --node-offset: 0px; }
+  .path-stop:nth-child(2) { --node-offset: 34px; }.path-stop:nth-child(3) { --node-offset: 52px; }.path-stop:nth-child(4) { --node-offset: 20px; }.path-stop:nth-child(5) { --node-offset: -20px; }
+  .path-companion { top: 400px; right: auto; left: 0; transform: scale(.6); transform-origin: top left; }
+  .app-shell .path-lesson-card .button { min-height: 48px; }
+}
+@media (prefers-reduced-motion: reduce) { .path-node__face { transition: none; }.path-node:hover .path-node__face { transform: none; } }
+[data-reduced-motion="true"] .path-node__face { transition: none; }
+[data-reduced-motion="true"] .path-node:hover .path-node__face { transform: none; }
