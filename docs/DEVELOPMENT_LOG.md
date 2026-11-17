@@ -1,5 +1,14 @@
 # Talinturo Development Log
 
+Entries below are historical snapshots. For current setup instructions, use the README and setup guides; older entries may name files or behavior that have since changed.
+
+## November 17, 2026 — Admin Sign Lab, analytics, and session persistence
+
+- Documented the admin workspace analytics, account management, and learning content authoring tools.
+- Documented the admin Sign Lab workflow for in-browser landmark capture, CSV/XLSX export and import, and experimental live coordinate comparison. It is not a validated sign recognition model; camera frames are not saved as video or uploaded.
+- Fixed the local Flask session signing key so it is generated once under the ignored `backend/instance/` directory and reused across backend restarts. The frontend already restores the signed-in account from `/api/auth/me` after a browser reload. Deployments must configure the same stable `TALINTURO_SECRET_KEY` across backend workers.
+- Updated setup guides to point to `sql/talinturo_schema.sql`, which creates the current schema without inserting sample data, and corrected the frontend npm commands to run against `frontend/`.
+
 ## November 16, 2026 — Lesson practice and live landmarks
 
 ### Lesson completion flow
@@ -61,7 +70,7 @@
 - Added `DATABASE_CONNECTION_SETUP.md` with local PostgreSQL setup through DBeaver or pgAdmin and Supabase direct/session-pooler connection instructions.
 - Clarified that DBeaver and pgAdmin are clients and require a running PostgreSQL server for a local database.
 - Documented IPv6 requirements for Supabase direct connections, IPv4 support through the Session pooler, `DATABASE_URL` precedence, schema loading, and connection error triage.
-- Updated README and setup instructions to use the current `talinturo.sql` dump and explain that its exported account rows should be reviewed before import.
+- At the time, README and setup instructions referred to an exported `talinturo.sql` dump. That dump is no longer in the project; current setup uses the schema-only `sql/talinturo_schema.sql`.
 - Linked the guide from the main setup and documentation pages.
 
 ### Validation
@@ -180,6 +189,6 @@
 
 - Configure production Google OAuth credentials and approved callback URLs; add password-reset email/token delivery.
 - Integrate and validate FSL learning content with Deaf FSL signers and educators.
-- Add a real sign-recognition model if camera-based recognition is required. The current camera feature is preview-only and does not recognize signs.
+- Add a validated sign-recognition model if camera-based recognition is required. Learner camera practice and the admin Sign Lab display or compare landmarks; neither is a trained or validated recognition model.
 - Replace demonstration learner records and progress summaries with authenticated, persisted production data.
 - Before deployment, configure production secrets, HTTPS, secure cookies, CORS, authentication protections, and age-appropriate privacy controls.

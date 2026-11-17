@@ -1,102 +1,93 @@
 # Talinturo
 
-Talinturo is a gamified Filipino Sign Language (FSL) learning app for learners, families, and educators. It pairs a responsive React interface with a Python Flask API and PostgreSQL.
+Talinturo is a Filipino Sign Language (FSL) learning app for learners, families, and educators. It pairs a React interface with a Flask API and PostgreSQL database.
 
-> **Status:** Working development MVP. Sample lessons, learner records, and classroom data demonstrate the experience; they are not production learning content or records.
+> **Status:** Development MVP. Learning content and records must be reviewed before real instructional use. The camera features display and compare landmark coordinates; they do not provide validated FSL sign recognition.
 
-## What is included
+## What the app includes
 
-- **Learner experience:** Dashboard, learning paths, video lessons followed by practice quizzes, vocabulary search, live camera landmark practice, scenario activity and results, level challenge, and progress.
-- **Instructor experience:** Dashboard, learner roster and details, virtual classrooms, classroom creation, and student management.
-- **Shared screens:** Landing, sign in and sign up, profile setup and editing, settings, password recovery information, help, and not-found handling.
-- **API:** Demo-role sessions, account creation and login, profile and progress endpoints, and instructor classroom and roster endpoints.
+- **Learners:** learning paths and video lessons, lesson quizzes, vocabulary and saved signs, practice activities, scenarios, challenges, progress, and classroom membership.
+- **Instructors:** learner dashboard and roster, learner details, classroom creation, and student management.
+- **Administrators:** overview metrics and activity analytics, account status and account creation, learning path, lesson and activity authoring and publishing, plus the Sign Lab.
+- **Sign Lab:** record labeled camera landmark frames and export CSV or XLSX files. Load a CSV/XLSX landmark dataset, choose a target word, and compare a live camera sample with the imported coordinates. The experimental nearest-coordinate comparison is a development tool, not a trained or validated recognition model.
+- **Authentication:** email/password login and signup, optional Google OAuth, role-based admin and instructor access. The browser restores a login from the HTTP-only Flask session cookie when the app reloads. Local development persists the cookie signing key in the ignored `backend/instance/session.key`; deployments must configure a shared `TALINTURO_SECRET_KEY`.
 
-## Technology
+Admin access is not offered on public sign-in or signup screens. Promote a trusted account in PostgreSQL and sign in through the standard login page; see [admin setup](docs/SETUP.md#admin-and-instructor-access).
 
-- React and JavaScript, with React Router
-- Vite development server and production build
-- Python and Flask, with Flask-CORS
-- PostgreSQL through `psycopg` for application data
+## Technology and data
+
+- React, React Router, Vite, and JavaScript
+- Python, Flask, Flask-CORS, Authlib, and `psycopg`
+- PostgreSQL, including Supabase when used as a managed PostgreSQL host
 - MediaPipe Tasks Vision for in-browser hand, face, and pose landmarks
+- ExcelJS for XLSX import and export in the Sign Lab
 
-The camera practice view draws face and body landmarks when a face is detected, and hand landmarks whenever hands are detected. Camera frames are processed in the browser and are not recorded or uploaded by Talinturo. The app does not classify FSL signs; a validated sign dataset and recognition model remain future work. The MediaPipe runtime and model files are downloaded from their configured CDN and Google Cloud Storage URLs when camera tracking is started.
+The Vite development server proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Flask reads the project-root `.env` and connects to PostgreSQL. Camera frames stay in the browser; they are not sent to Talinturo or saved as video. The Sign Lab exports coordinate rows locally in the browser.
 
-## Architecture
+The database structure is defined in [`sql/talinturo_schema.sql`](sql/talinturo_schema.sql). It creates schema only and does not add sample users, lessons, or learner records. Apply it to a new empty database; use the numbered scripts in `migrations/` only when upgrading an existing database from the corresponding older schema.
 
-```text
-React app (Vite)
-      │  /api requests
-      ▼
-Flask API ─── PostgreSQL
-```
-
-In development, Vite proxies `/api` requests to Flask at `http://127.0.0.1:5000`. Flask connects to the PostgreSQL database configured in the project-root `.env` file.
-
-## Project layout
-
-> **Development note:** This is the current project layout and may change as development continues.
+## Project structure
 
 ```text
 talinturo/
-├── .agents/                         # Project agent skills and lock file
-├── .vscode/                         # Workspace editor settings
 ├── backend/
-│   ├── app.py                       # Flask API and PostgreSQL access
+│   ├── app.py                       # Flask API, auth, and PostgreSQL access
 │   ├── requirements.txt             # Python dependencies
-│   └── test_app.py                  # Backend tests
+│   ├── test_app.py                  # API tests (require a separate test database)
+│   └── instance/                    # Ignored local session signing key, created at runtime
 ├── docs/
-│   ├── DATABASE_CONNECTION_SETUP.md
-│   ├── DEVELOPMENT_LOG.md
-│   ├── ENVIRONMENT.md
-│   └── SETUP.md
-├── frontend/                        # Vite and React application
-│   ├── public/                      # Static assets (currently the app logo)
+│   ├── DATABASE_CONNECTION_SETUP.md # Local PostgreSQL and Supabase connection setup
+│   ├── DEVELOPMENT_LOG.md           # Implementation history and validation notes
+│   ├── ENVIRONMENT.md                # Backend environment variables and security notes
+│   └── SETUP.md                      # Installation, database, auth, and run instructions
+├── frontend/
+│   ├── public/                       # Static public assets
 │   ├── src/
-│   │   ├── adapters/http/           # API client
-│   │   ├── app/                     # App entry, routes, guards, and hooks
-│   │   ├── assets/mascots/          # Mascot component assets
-│   │   ├── components/              # Shared brand, feedback, layout, and UI
-│   │   ├── constants/               # Shared constants
-│   │   ├── features/                # Feature modules and their pages
-│   │   │   ├── activities/          # Scenarios, challenges, and results
-│   │   │   ├── admin/
-│   │   │   ├── auth/                # Landing, login, and password screens
-│   │   │   ├── classroom/
-│   │   │   ├── help/
-│   │   │   ├── instructor/          # Instructor and learner management
-│   │   │   ├── lesson/              # Video lessons, quizzes, and camera practice
-│   │   │   ├── onboarding/
-│   │   │   ├── path/                # Learning path pages
-│   │   │   ├── practice/
-│   │   │   ├── profile/             # Profile, avatar, and settings
-│   │   │   ├── progress/
-│   │   │   └── vocabulary/
-│   │   └── styles/                  # Global and feature stylesheets
-│   ├── components.json
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
-├── migrations/                      # SQL migration scripts
-├── sql/                             # Database schema and setup scripts
-├── .env.example
+│   │   ├── adapters/http/            # API client, including cookie credentials
+│   │   ├── app/                      # App shell, routes, guards, and session hooks
+│   │   ├── components/               # Shared UI, layout, brand, and feedback components
+│   │   ├── constants/                # Navigation and shared constants
+│   │   ├── features/
+│   │   │   ├── activities/           # Scenarios, challenges, results
+│   │   │   ├── admin/                # Admin workspace and camera/data Sign Lab
+│   │   │   ├── auth/                 # Landing, login, signup, and password screens
+│   │   │   ├── classroom/            # Learner classroom membership
+│   │   │   ├── help/                 # Help and not-found pages
+│   │   │   ├── instructor/           # Instructor dashboard and learner management
+│   │   │   ├── lesson/               # Lesson player, quizzes, and landmark camera
+│   │   │   ├── onboarding/           # Profile setup
+│   │   │   ├── path/                 # Learning paths
+│   │   │   ├── practice/             # Learner practice
+│   │   │   ├── profile/              # Profile and settings
+│   │   │   ├── progress/             # Progress dashboard
+│   │   │   └── vocabulary/           # Sign vocabulary and favorites
+│   │   ├── styles/                   # Global and feature styles
+│   │   └── utils/                    # Shared presentation utilities
+│   ├── index.html                    # Vite HTML entry
+│   ├── package.json                  # Frontend dependencies and scripts
+│   └── vite.config.js                # Vite config and `/api` proxy
+├── migrations/                       # Ordered SQL upgrades for existing databases
+├── sql/
+│   ├── talinturo_schema.sql          # Current schema for a new empty database
+│   └── talinturo_database.sql        # Alternate earlier schema script; do not use for new installs
+├── .env.example                      # Safe environment variable template
 ├── .gitignore
-├── package.json                     # Root scripts
+├── package.json                      # Root npm dependency manifest
 ├── package-lock.json
 └── README.md
 ```
 
-Generated dependencies and local machine artifacts (including `node_modules/` and `microsoft/windows/powershell/ModuleAnalysisCache`) are omitted.
+Generated folders such as `node_modules/`, Python virtual environments, and local `backend/instance/` data are omitted.
 
 ## Documentation
 
-- [Setup and local development](docs/SETUP.md) — prerequisites, install/run steps, demo accounts, tests, and local configuration.
-- [Development log](docs/DEVELOPMENT_LOG.md) — implementation summary, validation, and follow-up work.
-- [Environment configuration](docs/ENVIRONMENT.md) — database and authentication settings.
-- [Database connection setup](docs/DATABASE_CONNECTION_SETUP.md) — PostgreSQL and Supabase connection instructions.
+- [Setup and local development](docs/SETUP.md) — install and run the app, configure PostgreSQL, use admin tools, and verify the environment.
+- [Environment configuration](docs/ENVIRONMENT.md) — database, session, cookie, demo, and OAuth settings.
+- [Database connection setup](docs/DATABASE_CONNECTION_SETUP.md) — connect to local PostgreSQL or Supabase PostgreSQL.
+- [Development log](docs/DEVELOPMENT_LOG.md) — dated implementation notes and validation history.
 
 ## FSL and privacy
 
-FSL is a living language belonging to the Filipino Deaf community. Sample vocabulary and scenarios in this MVP are illustrative and are not an authoritative dictionary or a replacement for learning from Deaf FSL signers and qualified educators. Have learning content reviewed by community members before using it for instruction.
+FSL is a living language belonging to the Filipino Deaf community. Review instructional content with Deaf FSL signers and qualified educators before publishing it. The Sign Lab's landmark distance comparison is experimental and should not be used as an assessment of signing proficiency.
 
-The local demo is not production-ready. Before deployment, configure a strong secret key, HTTPS and secure cookies, production CORS settings, account recovery, authentication protections, and age-appropriate privacy controls. Demo sign-in is disabled by default; see [docs/SETUP.md](docs/SETUP.md) before exposing the app.
+Before deployment, configure a strong shared session key, HTTPS and secure cookies, production CORS settings, account recovery, authentication protections, and age-appropriate privacy controls. Keep database credentials and private OAuth values out of source control. Demo sign-in is disabled by default.

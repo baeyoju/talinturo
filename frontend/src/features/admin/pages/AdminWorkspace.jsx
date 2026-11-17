@@ -5,6 +5,7 @@ const emptyOverview = {
   learners: 0, instructors: 0, active_accounts: 0, paths: 0,
   published_paths: 0, lessons: 0, published_lessons: 0, classrooms: 0,
 };
+const emptyAnalytics = { lessons_completed: 0, activities_completed: 0, practice_completions: 0, practice_completions_last_30_days: 0, engaged_learners: 0, average_score: null, completions_last_30_days: 0 };
 
 function Metric({ label, value, detail, icon }) {
   return <article className="admin-metric"><span className="admin-metric-icon">{icon}</span><div><small>{label}</small><strong>{value ?? "—"}</strong><span>{detail}</span></div></article>;
@@ -16,6 +17,10 @@ export default function AdminWorkspace({ user }) {
   const [accounts, setAccounts] = useState([]);
   const [paths, setPaths] = useState([]);
   const [lessons, setLessons] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [analytics, setAnalytics] = useState(emptyAnalytics);
+  const [topActivities, setTopActivities] = useState([]);
+  const [topLessons, setTopLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -29,19 +34,25 @@ export default function AdminWorkspace({ user }) {
     content: '{\n  "sections": [\n    { "title": "Introduction", "body": "Add your lesson material here." }\n  ]\n}',
   });
   const [lessonMediaForm, setLessonMediaForm] = useState({ image_url: "", video_url: "", captions_url: "", transcript: "" });
+  const [practiceForm, setPracticeForm] = useState({ path_id: "", title: "", content: '{\n  "word": "Hello",\n  "meaning": "A friendly greeting",\n  "steps": ["Raise your hand", "Follow the sign guide"],\n  "hint": "Practice slowly and comfortably."\n}' });
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+  const reload = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setError("");
     try {
-      const [summary, accountData, content] = await Promise.all([
-        api("/admin/overview"), api("/admin/accounts"), api("/admin/content"),
+      const [summary, accountData, content, analyticsData] = await Promise.all([
+        api("/admin/overview"), api("/admin/accounts"), api("/admin/content"), api("/admin/analytics"),
       ]);
       setOverview(summary.overview);
       setAccounts(accountData.accounts);
       setPaths(content.paths);
       setLessons(content.lessons);
+      setActivities(content.activities || []);
+      setAnalytics(analyticsData.analytics);
+      setTopActivities(analyticsData.top_activities);
+      setTopLessons(analyticsData.top_lessons);
       setLessonForm((current) => ({ ...current, path_id: current.path_id || String(content.paths[0]?.id || "") }));
+      setPracticeForm((current) => ({ ...current, path_id: current.path_id || String(content.paths[0]?.id || "") }));
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -49,7 +60,12 @@ export default function AdminWorkspace({ user }) {
     }
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    reload();
+    const refreshWhenFocused = () => { reload({ silent: true }); };
+    window.addEventListener("focus", refreshWhenFocused);
+    return () => window.removeEventListener("focus", refreshWhenFocused);
+  }, [reload]);
 
   const lessonsByPath = useMemo(() => lessons.reduce((groups, lesson) => {
     (groups[lesson.path_id] ||= []).push(lesson);
@@ -102,6 +118,19 @@ export default function AdminWorkspace({ user }) {
     }, "Lesson saved as a draft.");
   };
 
+  const createPractice = async (event) => {
+    event.preventDefault();
+    let content;
+    try { content = JSON.parse(practiceForm.content); }
+    catch { setError("Practice material must be valid JSON."); return; }
+    await save(async () => {
+      await api(`/admin/paths/${practiceForm.path_id}/activities`, {
+        method: "POST", body: JSON.stringify({ title: practiceForm.title, content }),
+      });
+      setPracticeForm((current) => ({ ...current, title: "" }));
+    }, "Practice activity saved as a draft.");
+  };
+
   const toggleAccount = (item) => save(
     () => api(`/admin/accounts/${item.id}/status`, { method: "PATCH", body: JSON.stringify({ is_active: !item.is_active }) }),
     `${item.name}'s account is now ${item.is_active ? "inactive" : "active"}.`,
@@ -115,6 +144,10 @@ export default function AdminWorkspace({ user }) {
   const toggleLesson = (lesson) => save(
     () => api(`/admin/lessons/${lesson.id}`, { method: "PATCH", body: JSON.stringify({ is_published: !lesson.is_published }) }),
     `“${lesson.title}” is now ${lesson.is_published ? "a draft" : "published"}.`,
+  );
+  const toggleActivity = (activity) => save(
+    () => api(`/admin/activities/${activity.id}`, { method: "PATCH", body: JSON.stringify({ is_published: !activity.is_published }) }),
+    `“${activity.title}” is now ${activity.is_published ? "a draft" : "published"}.`,
   );
 
   const editLessonMedia = (lesson) => {
@@ -154,6 +187,20 @@ export default function AdminWorkspace({ user }) {
           <Metric label="Published paths" value={`${overview.published_paths} / ${overview.paths}`} detail="Available learning journeys" icon="▤" />
           <Metric label="Published lessons" value={`${overview.published_lessons} / ${overview.lessons}`} detail="Ready for learners" icon="◷" />
         </div>
+        <div className="admin-metrics">
+          <Metric label="Engaged learners" value={analytics.engaged_learners} detail="Learners with recorded progress" icon="◎" />
+          <Metric label="Lesson completions" value={analytics.lessons_completed} detail="Completed lesson records" icon="✓" />
+          <Metric label="Practice completions" value={analytics.practice_completions} detail={`${analytics.practice_completions_last_30_days} in the last 30 days`} icon="✦" />
+          <Metric label="Average scored result" value={analytics.average_score == null ? "—" : `${analytics.average_score}%`} detail="Across scored activities; practice confirmations are not scored" icon="↗" />
+        </div>
+        <div className="admin-overview-grid">
+          <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">LEARNER ENGAGEMENT</p><h2>Most completed lessons</h2></div></div>
+            {topLessons.length ? topLessons.map((lesson) => <div className="admin-list-row" key={lesson.id}><div className="admin-row-copy"><strong>{lesson.title}</strong></div><span className="admin-count">{lesson.completions} completions</span></div>) : <p className="admin-empty">No lesson activity recorded yet.</p>}
+          </section>
+          <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">PRACTICE ENGAGEMENT</p><h2>Most completed activities</h2></div></div>
+            {topActivities.length ? topActivities.map((activity) => <div className="admin-list-row" key={activity.id}><div className="admin-row-copy"><strong>{activity.title}</strong><small>{activity.activity_type} · {activity.average_score == null ? "no score" : `average score ${activity.average_score}%`}</small></div><span className="admin-count">{activity.completions}</span></div>) : <p className="admin-empty">No activity recorded yet.</p>}
+          </section>
+        </div>
         <div className="admin-overview-grid">
           <section className="admin-panel"><div className="admin-panel-heading"><div><p className="eyebrow">CONTENT LIBRARY</p><h2>Learning paths</h2></div><button className="admin-text-button" onClick={() => setSection("content")}>Manage content →</button></div>
             {paths.length ? paths.slice(0, 5).map((path) => <div className="admin-list-row" key={path.id}><span className="admin-row-icon">▤</span><div className="admin-row-copy"><strong>{path.title}</strong><small>{path.level || "Uncategorized"} · {path.lesson_count} lessons</small></div><span className={`admin-status ${path.is_published ? "published" : "draft"}`}>{path.is_published ? "Published" : "Draft"}</span></div>) : <p className="admin-empty">No learning paths yet. Create a draft to begin.</p>}
@@ -179,11 +226,15 @@ export default function AdminWorkspace({ user }) {
           <section className="admin-panel admin-form-panel"><p className="eyebrow">LESSON DESIGN</p><h2>Add a lesson</h2><p className="admin-panel-intro">Add lesson media and accessibility materials here. Lesson notes can be added as a sections array with a title and body.</p>
             <form className="admin-form" onSubmit={createLesson}><label>Learning path<select required value={lessonForm.path_id} onChange={(event) => setLessonForm({ ...lessonForm, path_id: event.target.value })}><option value="">Choose a path</option>{paths.map((path) => <option key={path.id} value={path.id}>{path.title}</option>)}</select></label><label>Lesson title<input required maxLength={200} value={lessonForm.title} onChange={(event) => setLessonForm({ ...lessonForm, title: event.target.value })} placeholder="Introduce yourself" /></label><label>Description<textarea rows="2" value={lessonForm.description} onChange={(event) => setLessonForm({ ...lessonForm, description: event.target.value })} placeholder="A short learner-facing description" /></label><label>Duration (M:SS)<input required type="text" inputMode="numeric" pattern="[0-9]+:[0-5][0-9]" title="Enter minutes and seconds, such as 3:36" value={lessonForm.duration_minutes} onChange={(event) => setLessonForm({ ...lessonForm, duration_minutes: event.target.value })} placeholder="3:36" /></label><label>Lesson image URL<input type="url" value={lessonForm.image_url} onChange={(event) => setLessonForm({ ...lessonForm, image_url: event.target.value })} placeholder="https://..." /></label><label>Lesson video URL<input type="url" value={lessonForm.video_url} onChange={(event) => setLessonForm({ ...lessonForm, video_url: event.target.value })} placeholder="https://..." /></label><label>Subtitles file URL (.vtt)<input type="url" value={lessonForm.captions_url} onChange={(event) => setLessonForm({ ...lessonForm, captions_url: event.target.value })} placeholder="https://.../captions.vtt" /></label><label>Transcript<textarea rows="4" value={lessonForm.transcript} onChange={(event) => setLessonForm({ ...lessonForm, transcript: event.target.value })} placeholder="Lesson transcript for learners" /></label><label>Lesson material (JSON)<textarea className="admin-code-input" rows="7" value={lessonForm.content} onChange={(event) => setLessonForm({ ...lessonForm, content: event.target.value })} spellCheck="false" /></label><button className="button button-primary" type="submit" disabled={saving || !paths.length}>{saving ? "Saving…" : "Save lesson draft"} <span>→</span></button></form>
           </section>
+          <section className="admin-panel admin-form-panel"><p className="eyebrow">PRACTICE DESIGN</p><h2>Add a practice activity</h2><p className="admin-panel-intro">Practice activities use the existing activities table and JSON content format. Save as a draft, review, then publish.</p>
+            <form className="admin-form" onSubmit={createPractice}><label>Learning path<select required value={practiceForm.path_id} onChange={(event) => setPracticeForm({ ...practiceForm, path_id: event.target.value })}><option value="">Choose a path</option>{paths.map((path) => <option key={path.id} value={path.id}>{path.title}</option>)}</select></label><label>Activity title<input required maxLength={200} value={practiceForm.title} onChange={(event) => setPracticeForm({ ...practiceForm, title: event.target.value })} placeholder="Practice a greeting" /></label><label>Practice material (JSON)<textarea className="admin-code-input" rows="8" value={practiceForm.content} onChange={(event) => setPracticeForm({ ...practiceForm, content: event.target.value })} spellCheck="false" /></label><button className="button button-primary" type="submit" disabled={saving || !paths.length}>{saving ? "Saving…" : "Save practice draft"} <span>→</span></button></form>
+          </section>
         </div>
         <section className="admin-panel admin-content-list"><div className="admin-panel-heading"><div><p className="eyebrow">EDITORIAL LIBRARY</p><h2>Paths and lessons</h2></div><span className="admin-quiet-label">Drafts are private to the admin workspace</span></div>
           {paths.length ? paths.map((path) => <article className="admin-path-card" key={path.id}><div className="admin-path-heading"><div><span className="admin-path-level">{path.level || "Learning path"}</span><h3>{path.title}</h3><p>{path.description || "No description added yet."}</p><small>{lessonsByPath[path.id]?.length || 0} lesson(s) · <code>{path.slug}</code></small></div><div className="admin-path-actions"><span className={`admin-status ${path.is_published ? "published" : "draft"}`}>{path.is_published ? "Published" : "Draft"}</span><button className={`admin-publish-button ${path.is_published ? "is-published" : ""}`} disabled={saving} onClick={() => togglePath(path)}>{path.is_published ? "Unpublish" : "Publish path"}</button></div></div>
             {(lessonsByPath[path.id] || []).map((lesson) => <div className="admin-lesson-entry" key={lesson.id}><div className="admin-lesson-row"><span className="admin-lesson-mark">↳</span><div className="admin-row-copy"><strong>{lesson.title}</strong><small>{lesson.duration_minutes || "0:00"} · {lesson.content?.sections?.length || 0} sections · <code>{lesson.slug}</code></small></div><span className={`admin-status ${lesson.is_published ? "published" : "draft"}`}>{lesson.is_published ? "Published" : "Draft"}</span><button className="admin-small-button" onClick={() => editingLessonId === lesson.id ? setEditingLessonId(null) : editLessonMedia(lesson)}>{editingLessonId === lesson.id ? "Close editor" : "Edit media"}</button><button className="admin-small-button" disabled={saving || (!lesson.is_published && !path.is_published)} title={!path.is_published && !lesson.is_published ? "Publish the path first" : ""} onClick={() => toggleLesson(lesson)}>{lesson.is_published ? "Unpublish" : "Publish"}</button></div>{editingLessonId === lesson.id && <form className="admin-form admin-media-editor" onSubmit={(event) => updateLessonMedia(event, lesson)}><label>Lesson image URL<input type="url" value={lessonMediaForm.image_url} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, image_url: event.target.value })} placeholder="https://..." /></label><label>Lesson video URL<input type="url" value={lessonMediaForm.video_url} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, video_url: event.target.value })} placeholder="https://..." /></label><label>Subtitles file URL (.vtt)<input type="url" value={lessonMediaForm.captions_url} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, captions_url: event.target.value })} placeholder="https://.../captions.vtt" /></label><label>Transcript<textarea rows="4" value={lessonMediaForm.transcript} onChange={(event) => setLessonMediaForm({ ...lessonMediaForm, transcript: event.target.value })} placeholder="Lesson transcript for learners" /></label><button className="button button-primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save media"}</button></form>}</div>)}
             {!lessonsByPath[path.id]?.length && <p className="admin-empty admin-path-empty">No lessons yet. Add one using the lesson form above.</p>}
+            {activities.filter((activity) => activity.path_id === path.id).map((activity) => <div className="admin-lesson-entry" key={`activity-${activity.id}`}><div className="admin-lesson-row"><span className="admin-lesson-mark">✦</span><div className="admin-row-copy"><strong>{activity.title}</strong><small>Practice · {activity.content?.word || "No word"} · <code>{activity.slug}</code></small></div><span className={`admin-status ${activity.is_published ? "published" : "draft"}`}>{activity.is_published ? "Published" : "Draft"}</span><button className="admin-small-button" disabled={saving || (!activity.is_published && !path.is_published)} title={!path.is_published && !activity.is_published ? "Publish the path first" : ""} onClick={() => toggleActivity(activity)}>{activity.is_published ? "Unpublish" : "Publish"}</button></div></div>)}
           </article>) : <p className="admin-empty">No paths yet. Create the first one above.</p>}
         </section>
       </>}

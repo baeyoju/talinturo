@@ -124,7 +124,7 @@ function smoothHands(previous, next) {
   });
 }
 
-export function LandmarkCamera() {
+export function LandmarkCamera({ onLandmarks, onCameraState }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -132,6 +132,10 @@ export function LandmarkCamera() {
   const handLandmarkerRef = useRef(null);
   const frameRef = useRef(null);
   const runningRef = useRef(false);
+  const onLandmarksRef = useRef(onLandmarks);
+  const onCameraStateRef = useRef(onCameraState);
+  onLandmarksRef.current = onLandmarks;
+  onCameraStateRef.current = onCameraState;
   const [cameraOn, setCameraOn] = useState(false);
   const [status, setStatus] = useState("Camera is off");
   const [error, setError] = useState("");
@@ -155,6 +159,7 @@ export function LandmarkCamera() {
     const canvas = canvasRef.current;
     if (canvas) canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     setCameraOn(false);
+    onCameraStateRef.current?.(false);
     updateStatus("Camera is off");
   };
 
@@ -222,6 +227,7 @@ export function LandmarkCamera() {
       handLandmarkerRef.current = handLandmarker;
       runningRef.current = true;
       setCameraOn(true);
+      onCameraStateRef.current?.(true);
       updateStatus("Looking for your landmarks...");
       let lastVideoTime = -1;
       let lastDetectionAt = 0;
@@ -240,6 +246,15 @@ export function LandmarkCamera() {
           const handResult = handLandmarker.detectForVideo(video, now);
           handResult.landmarks = smoothHands(previousHands, handResult.landmarks);
           previousHands = handResult.landmarks;
+          onLandmarksRef.current?.({
+            captured_at: new Date().toISOString(),
+            hands: handResult.landmarks.map((landmarks, index) => ({
+              handedness: handResult.handedness?.[index]?.[0]?.categoryName || `Hand ${index + 1}`,
+              landmarks,
+            })),
+            pose: result.poseLandmarks?.[0] || [],
+            face: result.faceLandmarks?.[0] || [],
+          });
           paintLandmarks(canvas, result, handResult);
           if (!result.faceLandmarks?.[0]?.length && handResult.landmarks.length) updateStatus(`Face not detected; ${handResult.landmarks.length} hand${handResult.landmarks.length === 1 ? "" : "s"} tracked`);
           else if (!result.faceLandmarks?.[0]?.length) updateStatus("Face not detected; hand landmarks appear when hands enter the frame");

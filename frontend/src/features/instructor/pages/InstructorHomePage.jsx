@@ -13,12 +13,12 @@ export function InstructorHomePage({ user, onNavigate }) {
   const [rosterLoaded, setRosterLoaded] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      api("/dashboard"),
-      api("/instructor/learners"),
-      api("/instructor/classrooms"),
+    let active = true;
+    const refresh = () => Promise.all([
+      api("/dashboard"), api("/instructor/learners"), api("/instructor/classrooms"),
     ])
       .then(([dashboardData, learnersData, classroomsData]) => {
+        if (!active) return;
         setSummary(dashboardData);
         setRoster(learnersData.learners.map((learner, index) => ({
           ...learner,
@@ -26,9 +26,13 @@ export function InstructorHomePage({ user, onNavigate }) {
           color: ["coral", "blue", "purple", "gold"][index % 4],
         })));
         setClassrooms(classroomsData.classrooms);
+        setLoadError("");
       })
-      .catch((error) => setLoadError(error.message))
-      .finally(() => setRosterLoaded(true));
+      .catch((error) => { if (active) setLoadError(error.message); })
+      .finally(() => { if (active) setRosterLoaded(true); });
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("focus", refresh); };
   }, []);
 
   const firstName = user.name.split(" ")[0];
@@ -44,7 +48,7 @@ export function InstructorHomePage({ user, onNavigate }) {
         <StatCard icon="users" tone="blue" label="Learners" value={summary ? roster.length : "—"} change="In your learning community" />
         <StatCard icon="school" tone="yellow" label="Classrooms" value={summary ? summary.classrooms : "—"} change="Spaces to learn together" />
         <StatCard icon="bookOpen" tone="coral" label="Lessons completed" value={summary ? summary.lessons_completed : "—"} change="Across your account" />
-        <StatCard icon="heart" tone="mint" label="Learners to encourage" value={summary ? roster.filter((learner) => learner.accuracy < 85).length : "—"} change="A kind check-in can help" />
+        <StatCard icon="heart" tone="mint" label="Learners to encourage" value={summary ? roster.filter((learner) => learner.accuracy == null || learner.accuracy < 85).length : "—"} change="Includes learners without a scored result yet" />
       </div>
       <div className="instructor-dashboard-grid">
         <section className="dashboard-card instructor-roster-card">
