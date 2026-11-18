@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatCard } from "@/components/ui/StatCard";
-import { introTextVariants } from "@/lib/motion";
+import { introTextVariants } from "@/utils/motion";
 
 // Learner dashboard ("Home").
 export function HomePage({ user, onNavigate }) {
@@ -16,9 +16,13 @@ export function HomePage({ user, onNavigate }) {
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    api("/dashboard")
-      .then(setSummary)
-      .catch((error) => setLoadError(error.message));
+    let active = true;
+    const refresh = () => api("/dashboard")
+      .then((data) => { if (active) { setSummary(data); setLoadError(""); } })
+      .catch((error) => { if (active) setLoadError(error.message); });
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("focus", refresh); };
   }, []);
 
   const firstName = user.name.split(" ")[0];
@@ -52,7 +56,7 @@ export function HomePage({ user, onNavigate }) {
 
       <section className="dashboard-metrics" aria-label="Your learning at a glance">
         <StatCard icon="bookOpen" tone="blue" label="Lessons completed" value={summary ? summary.lessons_completed : "—"} change="Every step counts" />
-        <StatCard icon="star" tone="yellow" label="Practice accuracy" value={summary?.average_score == null ? "—" : `${summary.average_score}%`} change="From completed activities" />
+        <StatCard icon="star" tone="yellow" label="Scored activity accuracy" value={summary?.average_score == null ? "—" : `${summary.average_score}%`} change="Practice confirmations are not scored" />
         <StatCard icon="flame" tone="coral" label="Learning streak" value={summary ? `${summary.learning_streak} days` : "—"} change="A little practice each day" />
       </section>
 

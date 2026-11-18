@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Icon } from "@/components/ui/Icon";
-import { initials } from "@/lib/initials";
-import { pageTitle } from "@/lib/pageTitle";
+import { initials } from "@/utils/initials";
+import { pageTitle } from "@/utils/pageTitle";
 
 export function TopBar({ headerRef, user, role, demoMode, apiOnline, currentStreak, showNavToggle, sidebarOpen, onToggleSidebar, onCloseSidebar, onSwitchRole, onSignOut }) {
   const location = useLocation();

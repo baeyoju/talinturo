@@ -23,6 +23,7 @@ export const instructorNav = [
 export const adminNav = [
   { heading: "ADMINISTRATION" },
   { label: "Overview", to: "/admin", icon: "home" },
+  { label: "Sign lab", to: "/admin/sign-lab", icon: "hand" },
 ];
 
 export function roleHome(role) {

@@ -1,5 +1,32 @@
 # Talinturo Development Log
 
+Entries below are historical snapshots. For current setup instructions, use the README and setup guides; older entries may name files or behavior that have since changed.
+
+## November 17, 2026 — Admin Sign Lab, analytics, and session persistence
+
+- Documented the admin workspace analytics, account management, and learning content authoring tools.
+- Documented the admin Sign Lab workflow for in-browser landmark capture, CSV/XLSX export and import, and experimental live coordinate comparison. It is not a validated sign recognition model; camera frames are not saved as video or uploaded.
+- Fixed the local Flask session signing key so it is generated once under the ignored `backend/instance/` directory and reused across backend restarts. The frontend already restores the signed-in account from `/api/auth/me` after a browser reload. Deployments must configure the same stable `TALINTURO_SECRET_KEY` across backend workers.
+- Updated setup guides to point to `sql/talinturo_schema.sql`, which creates the current schema without inserting sample data, and corrected the frontend npm commands to run against `frontend/`.
+
+## November 16, 2026 — Lesson practice and live landmarks
+
+### Lesson completion flow
+
+- Video completion now records 50% lesson progress. Learners proceed to a practice quiz; completing all correct answers and confirming practice records 100%.
+- Lesson authors can put lesson-specific questions in `lessons.content.practice.questions`. Correct-answer flags are checked by the API and are not returned to learners. Lessons without configured questions receive a basic fallback question.
+- Updated lesson path actions to distinguish starting, resuming, and restarting lessons.
+
+### Camera landmarks
+
+- Added a live, in-browser MediaPipe camera overlay for pose, face, and hand landmarks. Body and face landmarks are shown when a face is detected; hand landmarks can be shown independently.
+- Uses the dedicated Hand Landmarker for finger joints with light frame-to-frame smoothing. Camera preview and landmark overlay share the same fitted frame and zoom.
+- Camera frames are processed in the browser, not recorded or sent to Talinturo's API. The current feature displays landmarks and does not classify FSL signs.
+
+### Documentation
+
+- Updated README and setup instructions for PostgreSQL, the lesson progress milestones, lesson-specific quiz JSON, MediaPipe runtime/model downloads, and camera privacy behavior.
+
 ## November 8, 2026 — Project structure cleanup and folder reorganization
 
 ### Repository layout update
@@ -43,7 +70,7 @@
 - Added `DATABASE_CONNECTION_SETUP.md` with local PostgreSQL setup through DBeaver or pgAdmin and Supabase direct/session-pooler connection instructions.
 - Clarified that DBeaver and pgAdmin are clients and require a running PostgreSQL server for a local database.
 - Documented IPv6 requirements for Supabase direct connections, IPv4 support through the Session pooler, `DATABASE_URL` precedence, schema loading, and connection error triage.
-- Updated README and setup instructions to use the current `talinturo.sql` dump and explain that its exported account rows should be reviewed before import.
+- At the time, README and setup instructions referred to an exported `talinturo.sql` dump. That dump is no longer in the project; current setup uses the schema-only `sql/talinturo_schema.sql`.
 - Linked the guide from the main setup and documentation pages.
 
 ### Validation
@@ -162,6 +189,6 @@
 
 - Configure production Google OAuth credentials and approved callback URLs; add password-reset email/token delivery.
 - Integrate and validate FSL learning content with Deaf FSL signers and educators.
-- Add a real sign-recognition model if camera-based recognition is required. The current camera feature is preview-only and does not recognize signs.
+- Add a validated sign-recognition model if camera-based recognition is required. Learner camera practice and the admin Sign Lab display or compare landmarks; neither is a trained or validated recognition model.
 - Replace demonstration learner records and progress summaries with authenticated, persisted production data.
 - Before deployment, configure production secrets, HTTPS, secure cookies, CORS, authentication protections, and age-appropriate privacy controls.

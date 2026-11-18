@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Icon } from "@/components/ui/Icon";
 import { adminNav, instructorNav, learnerNav } from "@/constants/navigation";
-import { initials } from "@/lib/initials";
+import { initials } from "@/utils/initials";
 
 const accountLabel = { admin: "Administrator account", instructor: "Instructor account", learner: "Learner account" };
 

@@ -36,7 +36,7 @@ CLASSROOM_PK = "classroom_id"
 MEMBERSHIP_PK = "membership_id"
 ACHIEVEMENT_PK = "achievement_id"
 LESSON_PUBLISHED_FILTER = "AND l.is_published = TRUE"
-SINGLE_LESSON_PUBLISHED_FILTER = "AND is_published = TRUE"
+SINGLE_LESSON_PUBLISHED_FILTER = "AND l.is_published = TRUE"
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.environ.get(
@@ -71,8 +71,29 @@ class DatabaseConnectionError(RuntimeError):
 
 
 app = Flask(__name__)
+
+
+def get_session_secret():
+    """Keep locally issued session cookies valid across Flask restarts."""
+    configured_secret = os.environ.get("TALINTURO_SECRET_KEY", "").strip()
+    if configured_secret:
+        return configured_secret
+
+    # Flask's default instance directory is ignored by git and is suitable for
+    # local-only runtime state. Deployment environments should set the secret
+    # explicitly so every worker uses the same value.
+    secret_path = Path(app.instance_path) / "session.key"
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with secret_path.open("x", encoding="utf-8") as secret_file:
+            secret_file.write(secrets.token_urlsafe(48))
+    except FileExistsError:
+        pass
+    return secret_path.read_text(encoding="utf-8").strip()
+
+
 app.config.update(
-    SECRET_KEY=os.environ.get("TALINTURO_SECRET_KEY") or secrets.token_urlsafe(32),
+    SECRET_KEY=get_session_secret(),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("TALINTURO_COOKIE_SECURE", "false").lower() == "true",
@@ -561,6 +582,58 @@ def admin_overview():
     return jsonify({"overview": {key: db.execute(sql).fetchone()["total"] for key, sql in counts.items()}})
 
 
+@app.get("/api/admin/analytics")
+@admin_required
+def admin_analytics():
+    db = get_db()
+    totals = db.execute("""
+        SELECT
+          (SELECT COUNT(*) FROM lesson_progress lp JOIN users u ON u.user_id = lp.user_id
+            WHERE u.role = 'learner' AND lp.progress_percent >= 100) AS lessons_completed,
+          (SELECT COUNT(*) FROM activity_attempts aa JOIN users u ON u.user_id = aa.user_id
+            WHERE u.role = 'learner' AND aa.status = 'completed') AS activities_completed,
+          (SELECT COUNT(*) FROM activity_attempts aa JOIN activities a ON a.activity_id = aa.activity_id
+            JOIN users u ON u.user_id = aa.user_id
+            WHERE u.role = 'learner' AND aa.status = 'completed' AND a.activity_type = 'practice') AS practice_completions,
+          (SELECT COUNT(*) FROM activity_attempts aa JOIN activities a ON a.activity_id = aa.activity_id
+            JOIN users u ON u.user_id = aa.user_id
+            WHERE u.role = 'learner' AND aa.status = 'completed' AND a.activity_type = 'practice'
+              AND aa.completed_at >= CURRENT_DATE - INTERVAL '30 days') AS practice_completions_last_30_days,
+          (SELECT COUNT(DISTINCT user_id) FROM (
+             SELECT lp.user_id FROM lesson_progress lp JOIN users u ON u.user_id = lp.user_id
+               WHERE u.role = 'learner' AND lp.progress_percent > 0
+             UNION SELECT aa.user_id FROM activity_attempts aa JOIN users u ON u.user_id = aa.user_id
+               WHERE u.role = 'learner' AND aa.status = 'completed'
+           ) engaged) AS engaged_learners,
+          (SELECT ROUND(AVG(aa.score)::numeric, 1) FROM activity_attempts aa
+            JOIN activities a ON a.activity_id = aa.activity_id
+            JOIN users u ON u.user_id = aa.user_id
+            WHERE u.role = 'learner' AND aa.status = 'completed' AND aa.score IS NOT NULL
+              AND a.activity_type <> 'practice') AS average_score,
+          (SELECT COUNT(*) FROM activity_attempts aa JOIN users u ON u.user_id = aa.user_id
+            WHERE u.role = 'learner' AND aa.status = 'completed'
+              AND aa.completed_at >= CURRENT_DATE - INTERVAL '30 days') AS completions_last_30_days
+    """).fetchone()
+    top_activities = db.execute("""
+        SELECT a.activity_id AS id, a.title, a.activity_type,
+          COUNT(aa.attempt_id) AS completions,
+          ROUND((AVG(aa.score) FILTER (WHERE a.activity_type <> 'practice'))::numeric, 1) AS average_score
+        FROM activities a LEFT JOIN activity_attempts aa
+          ON aa.activity_id = a.activity_id AND aa.status = 'completed'
+          AND EXISTS (SELECT 1 FROM users u WHERE u.user_id = aa.user_id AND u.role = 'learner')
+        GROUP BY a.activity_id ORDER BY completions DESC, a.title LIMIT 5
+    """).fetchall()
+    top_lessons = db.execute("""
+        SELECT l.lesson_id AS id, l.title,
+          COUNT(lp.user_id) FILTER (WHERE lp.progress_percent >= 100) AS completions
+        FROM lessons l LEFT JOIN lesson_progress lp ON lp.lesson_id = l.lesson_id
+          AND EXISTS (SELECT 1 FROM users u WHERE u.user_id = lp.user_id AND u.role = 'learner')
+        GROUP BY l.lesson_id ORDER BY completions DESC, l.title LIMIT 5
+    """).fetchall()
+    return jsonify({"analytics": dict(totals), "top_activities": [dict(row) for row in top_activities],
+                    "top_lessons": [dict(row) for row in top_lessons]})
+
+
 @app.get("/api/admin/accounts")
 @admin_required
 def admin_accounts():
@@ -642,7 +715,61 @@ def admin_content():
         "FROM lessons l JOIN learning_paths p ON p.path_id = l.path_id "
         "ORDER BY l.path_id, l.lesson_id"
     ).fetchall()
-    return jsonify({"paths": [dict(row) for row in rows], "lessons": [dict(row) for row in lessons]})
+    activities = get_db().execute(
+        "SELECT a.activity_id AS id, a.path_id, a.slug, a.activity_type, a.title, a.content, "
+        "a.is_published, p.title AS path_title FROM activities a "
+        "JOIN learning_paths p ON p.path_id = a.path_id ORDER BY a.path_id, a.activity_id"
+    ).fetchall()
+    return jsonify({"paths": [dict(row) for row in rows], "lessons": [dict(row) for row in lessons],
+                    "activities": [dict(row) for row in activities]})
+
+
+@app.post("/api/admin/paths/<int:path_id>/activities")
+@admin_required
+def admin_create_activity(path_id):
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title", "")).strip()
+    content = data.get("content")
+    slug = re.sub(r"[^a-z0-9]+", "-", str(data.get("slug") or title).lower()).strip("-")
+    if not title or len(title) > 200 or not slug or len(slug) > 120:
+        return json_error("Enter a valid practice title and slug.", 400)
+    if not isinstance(content, dict) or not str(content.get("word", "")).strip():
+        return json_error("Practice content must be an object with a word.", 400)
+    steps = content.get("steps")
+    if not isinstance(steps, list) or not steps or any(not isinstance(step, str) or not step.strip() for step in steps):
+        return json_error("Add at least one non-empty practice instruction step.", 400)
+    published = data.get("is_published", False)
+    if not isinstance(published, bool):
+        return json_error("Publish status must be true or false.", 400)
+    db = get_db()
+    if db.execute("SELECT 1 FROM learning_paths WHERE path_id = ?", (path_id,)).fetchone() is None:
+        return json_error("Learning path not found.", 404)
+    try:
+        activity_id = insert_id(db,
+            "INSERT INTO activities(path_id, slug, activity_type, title, content, is_published) "
+            "VALUES(?, ?, 'practice', ?, ?, ?)",
+            (path_id, slug, title, Jsonb(content), published), ACTIVITY_PK)
+        db.commit()
+    except INTEGRITY_ERRORS:
+        db.rollback()
+        return json_error("An activity already uses that slug.", 409)
+    return jsonify({"id": activity_id, "path_id": path_id, "title": title, "is_published": published}), 201
+
+
+@app.patch("/api/admin/activities/<int:activity_id>")
+@admin_required
+def admin_update_activity(activity_id):
+    published = (request.get_json(silent=True) or {}).get("is_published")
+    if not isinstance(published, bool):
+        return json_error("Publish status must be true or false.", 400)
+    row = get_db().execute(
+        "UPDATE activities SET is_published = ? WHERE activity_id = ? "
+        "RETURNING activity_id AS id, is_published", (published, activity_id)
+    ).fetchone()
+    if row is None:
+        return json_error("Practice activity not found.", 404)
+    get_db().commit()
+    return jsonify({"activity": dict(row)})
 
 
 @app.post("/api/admin/paths")
@@ -877,7 +1004,7 @@ def dashboard():
     events = db.execute(
         f"""
         SELECT COUNT(*) AS activities_completed,
-               ROUND(AVG(aa.score))::INTEGER AS average_score
+               ROUND(AVG(aa.score) FILTER (WHERE a.activity_type <> 'practice'))::INTEGER AS average_score
         FROM activity_attempts aa
         JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         WHERE aa.user_id = ? AND aa.status = 'completed'
@@ -1061,7 +1188,8 @@ def learning_path_detail(path_id):
         f"""
         SELECT l.{LESSON_PK} AS id, l.title, l.duration_minutes, l.content,
                l.image_url, l.video_url,
-               COALESCE(lp.progress_percent, 0) AS progress
+               COALESCE(lp.progress_percent, 0) AS progress,
+               COALESCE(lp.started_at IS NOT NULL OR lp.progress_percent > 0, FALSE) AS started
         FROM lessons l
         LEFT JOIN lesson_progress lp
           ON lp.lesson_id = l.{LESSON_PK} AND lp.user_id = ?
@@ -1108,16 +1236,107 @@ def complete_lesson(lesson_id):
     db.execute(
         """
         INSERT INTO lesson_progress
-            (user_id, lesson_id, status, progress_percent, started_at, completed_at, updated_at)
-        VALUES(?, ?, 'completed', 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            (user_id, lesson_id, status, progress_percent, started_at, updated_at)
+        VALUES(?, ?, 'in_progress', 50, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id, lesson_id)
-        DO UPDATE SET progress_percent = 100, status = 'completed',
-                      completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        DO UPDATE SET progress_percent = GREATEST(lesson_progress.progress_percent, 50),
+                      status = CASE WHEN lesson_progress.status = 'completed' THEN 'completed' ELSE 'in_progress' END,
+                      started_at = COALESCE(lesson_progress.started_at, CURRENT_TIMESTAMP),
+                      updated_at = CURRENT_TIMESTAMP
         """,
         (session["user_id"], lesson_id),
     )
     db.commit()
-    return jsonify({"success": True, "lesson_id": lesson_id, "progress": 100})
+    saved = db.execute("SELECT progress_percent FROM lesson_progress WHERE user_id = ? AND lesson_id = ?", (session["user_id"], lesson_id)).fetchone()
+    return jsonify({"success": True, "lesson_id": lesson_id, "progress": saved["progress_percent"]})
+
+
+@app.post("/api/lessons/<int:lesson_id>/practice/complete")
+@login_required
+def complete_lesson_practice(lesson_id):
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    lesson = db.execute(
+        f"SELECT l.{LESSON_PK} AS id, l.title, l.content FROM lessons l "
+        f"JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE "
+        f"WHERE l.{LESSON_PK} = ? {SINGLE_LESSON_PUBLISHED_FILTER}", (lesson_id,),
+    ).fetchone()
+    if lesson is None:
+        return json_error("This lesson is not available.", 404)
+    watched = db.execute(
+        "SELECT progress_percent FROM lesson_progress WHERE user_id = ? AND lesson_id = ?",
+        (session["user_id"], lesson_id),
+    ).fetchone()
+    if watched is None or watched["progress_percent"] < 50:
+        return json_error("Finish the lesson video before submitting its practice.", 409)
+    content = lesson["content"] if isinstance(lesson["content"], dict) else {}
+    practice = content.get("practice") if isinstance(content.get("practice"), dict) else {}
+    questions = practice.get("questions") if isinstance(practice.get("questions"), list) else []
+    if not questions:
+        questions = [{"prompt": f"Which lesson did you just practice?", "choices": [
+            {"id": "lesson", "label": lesson["title"], "correct": True},
+            {"id": "review", "label": "A different lesson", "correct": False},
+        ]}]
+    answers = data.get("answers")
+    if data.get("practice_confirmed") is not True:
+        return json_error("Confirm that you practiced the sign before completing this lesson.", 400)
+    if not isinstance(answers, list) or len(answers) != len(questions):
+        return json_error("Answer every practice question before submitting.", 400)
+    correct = 0
+    for question, answer in zip(questions, answers):
+        choices = question.get("choices", []) if isinstance(question, dict) else []
+        if not isinstance(choices, list) or not any(choice.get("id") == answer for choice in choices if isinstance(choice, dict)):
+            return json_error("One or more answers are invalid.", 400)
+        correct += int(any(choice.get("id") == answer and choice.get("correct") is True for choice in choices if isinstance(choice, dict)))
+    score = round(correct * 100 / len(questions)) if questions else 100
+    if score < 100:
+        return jsonify({"success": True, "completed": False, "score": score, "message": "Review the lesson and try again."})
+    db.execute("""
+        INSERT INTO lesson_progress (user_id, lesson_id, status, progress_percent, started_at, completed_at, best_score, updated_at)
+        VALUES (?, ?, 'completed', 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, lesson_id) DO UPDATE SET status = 'completed', progress_percent = 100,
+          completed_at = COALESCE(lesson_progress.completed_at, CURRENT_TIMESTAMP),
+          best_score = GREATEST(COALESCE(lesson_progress.best_score, 0), excluded.best_score), updated_at = CURRENT_TIMESTAMP
+    """, (session["user_id"], lesson_id, score))
+    db.commit()
+    return jsonify({"success": True, "completed": True, "lesson_id": lesson_id, "progress": 100, "score": score})
+
+
+@app.post("/api/lessons/<int:lesson_id>/start")
+@login_required
+def start_lesson(lesson_id):
+    db = get_db()
+    lesson = db.execute(
+        f"""
+        SELECT l.{LESSON_PK} AS id
+        FROM lessons l
+        JOIN learning_paths p ON p.{PATH_PK} = l.path_id AND p.is_published = TRUE
+        WHERE l.{LESSON_PK} = ? AND l.is_published = TRUE
+        """,
+        (lesson_id,),
+    ).fetchone()
+    if lesson is None:
+        return json_error("This lesson is not available.", 404)
+    progress = db.execute(
+        """
+        INSERT INTO lesson_progress
+            (user_id, lesson_id, status, progress_percent, started_at, updated_at)
+        VALUES(?, ?, 'in_progress', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, lesson_id)
+        DO UPDATE SET
+            status = CASE
+                WHEN lesson_progress.status = 'completed' OR lesson_progress.progress_percent >= 100
+                    THEN 'completed'
+                ELSE 'in_progress'
+            END,
+            started_at = COALESCE(lesson_progress.started_at, CURRENT_TIMESTAMP),
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING status, progress_percent, started_at
+        """,
+        (session["user_id"], lesson_id),
+    ).fetchone()
+    db.commit()
+    return jsonify({"success": True, "lesson_id": lesson_id, **dict(progress)})
 
 
 @app.get("/api/lessons/<int:lesson_id>")
@@ -1138,7 +1357,26 @@ def lesson_detail(lesson_id):
     ).fetchone()
     if row is None:
         return json_error("This lesson is not available.", 404)
-    return jsonify({"lesson": dict(row)})
+    result = dict(row)
+    content = result.get("content") if isinstance(result.get("content"), dict) else {}
+    practice = content.get("practice") if isinstance(content.get("practice"), dict) else {}
+    questions = practice.get("questions") if isinstance(practice.get("questions"), list) else []
+    if not questions:
+        questions = [{"prompt": "Which lesson did you just practice?", "choices": [
+            {"id": "lesson", "label": result["title"]},
+            {"id": "review", "label": "A different lesson"},
+        ]}]
+    safe_questions = []
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        safe_questions.append({**question, "choices": [
+            {key: value for key, value in choice.items() if key != "correct"}
+            for choice in question.get("choices", []) if isinstance(choice, dict)
+        ]})
+    content["practice"] = {**practice, "questions": safe_questions}
+    result["content"] = content
+    return jsonify({"lesson": result})
 
 
 @app.put("/api/lessons/<int:lesson_id>/progress")
@@ -1337,7 +1575,8 @@ def record_progress():
     if not isinstance(response, dict):
         return json_error("Activity response must be an object.", 400)
     if activity["activity_type"] == "practice":
-        score = 100
+        # A learner confirmation records participation, not an objectively scored result.
+        score = None
     else:
         questions = (activity["content"] or {}).get("questions", [])
         answers = response.get("answers")
@@ -1386,7 +1625,7 @@ def progress():
     user_id = session["user_id"]
     rows = db.execute(
         f"""
-        SELECT aa.activity_id, a.title AS activity, aa.score, aa.completed_at AS created_at
+        SELECT aa.activity_id, a.title AS activity, a.activity_type, aa.score, aa.completed_at AS created_at
         FROM activity_attempts aa
         JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         WHERE aa.user_id = ? AND aa.status = 'completed'
@@ -1459,13 +1698,14 @@ def instructor_learners():
         SELECT cm.{MEMBERSHIP_PK} AS membership_id, u.{USER_PK} AS user_id,
                u.name AS name,
                COUNT(DISTINCT aa.{ATTEMPT_PK}) AS activities,
-               AVG(aa.score) AS accuracy,
+               AVG(aa.score) FILTER (WHERE a.activity_type <> 'practice') AS accuracy,
                MAX(aa.completed_at) AS last_active
         FROM classrooms c
         JOIN classroom_memberships cm ON cm.classroom_id = c.{CLASSROOM_PK}
         JOIN users u ON u.{USER_PK} = cm.user_id AND u.role = 'learner'
         LEFT JOIN activity_attempts aa
           ON aa.user_id = u.{USER_PK} AND aa.status = 'completed'
+        LEFT JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         WHERE c.instructor_id = ? AND c.is_active = TRUE
           AND cm.status = 'active'
         GROUP BY cm.{MEMBERSHIP_PK}, u.{USER_PK}, u.name
@@ -1496,12 +1736,14 @@ def instructor_learner_detail(learner_id):
     row = db.execute(
         f"""
         SELECT u.{USER_PK} AS id, u.name, COUNT(DISTINCT aa.{ATTEMPT_PK}) AS activities,
-               AVG(aa.score) AS accuracy, MAX(aa.completed_at) AS last_active
+               AVG(aa.score) FILTER (WHERE a.activity_type <> 'practice') AS accuracy,
+               MAX(aa.completed_at) AS last_active
         FROM users u
         JOIN classroom_memberships cm ON cm.user_id = u.{USER_PK} AND cm.status = 'active'
         JOIN classrooms c ON c.{CLASSROOM_PK} = cm.classroom_id
         LEFT JOIN activity_attempts aa
           ON aa.user_id = u.{USER_PK} AND aa.status = 'completed'
+        LEFT JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         WHERE u.{USER_PK} = ? AND u.role = 'learner'
           AND c.instructor_id = ? AND c.is_active = TRUE
         GROUP BY u.{USER_PK}, u.name
@@ -1521,7 +1763,7 @@ def instructor_learner_detail(learner_id):
     }
     events = db.execute(
         f"""
-        SELECT a.title AS activity, aa.score, aa.completed_at AS created_at
+        SELECT a.title AS activity, a.activity_type, aa.score, aa.completed_at AS created_at
         FROM activity_attempts aa
         JOIN activities a ON a.{ACTIVITY_PK} = aa.activity_id
         JOIN classroom_memberships cm ON cm.user_id = aa.user_id AND cm.status = 'active'
