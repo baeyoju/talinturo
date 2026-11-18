@@ -1,0 +1,37 @@
+.avatar-page { color: #4a4a4a; font-family: "Open Sans", sans-serif; }
+.avatar-page > .page-title { border: 1px solid #c4ccff; border-radius: 12px; padding: 20px 24px; background: #f4f5ff; }
+.app-shell.workspace-shell .avatar-page .page-title h1 { color: #4a4a4a; }
+.app-shell.workspace-shell .avatar-page .page-description { color: #6b6b6b; }
+.avatar-page h2 { margin: 0; color: #1a35c4; font: 500 13px/20px "Open Sans", sans-serif; }
+.avatar-editor { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 1.2fr); gap: 24px; margin-top: 24px; }
+.avatar-preview { min-height: 236px; display: grid; place-items: center; overflow: visible; background: #add8e6; border-radius: 16px; padding: 24px; margin-bottom: 16px; }
+.avatar-characters { display: flex; gap: 14px; margin: 12px 0 24px; }
+.avatar-characters button { display: grid; place-items: center; gap: 8px; flex: 1; min-height: 88px; padding: 12px 8px; border: 1px solid #d8d8d8; border-radius: 12px; background: #fff; font-size: 12px; }
+.avatar-characters button[aria-pressed="true"], .avatar-accessories button[aria-pressed="true"] { border-color: #1a35c4; box-shadow: inset 0 0 0 1px #1a35c4; }
+.avatar-swatch { width: 36px; height: 36px; border-radius: 50%; }
+.avatar-swatch--algwas { background: #f3c730; }.avatar-swatch--connie { background: #e3999d; }.avatar-swatch--orange { background: #ffa51c; }
+.workspace-shell .avatar-page .button.avatar-save { width: 100%; min-height: 48px; padding: 12px 20px; background: #1a35c4; box-shadow: 0 4px 0 #102673; color: #fff; border: 0; border-radius: 12px; font-size: 14px; }
+.workspace-shell .avatar-page .button.avatar-save:hover { background: #153299; }
+.avatar-shop header { display: flex; align-items: center; justify-content: space-between; min-height: 32px; margin-bottom: 14px; }
+.avatar-balance { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 12px; background: #fff1c6; color: #8a6a10; font-size: 12px; font-weight: 700; }
+.avatar-star { width: 14px; height: 14px; }.avatar-star img { display: block; max-width: none; transform: scale(.236); transform-origin: top left; }
+.avatar-accessories { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.avatar-accessories button, .avatar-coming-soon { min-width: 0; min-height: 148px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px 8px; border: 1px solid #d8d8d8; border-radius: 16px; background: #fff; }
+.avatar-accessories button:disabled { cursor: not-allowed; }.avatar-accessories button:disabled:not([aria-pressed="true"]) { background: #fafafa; }
+.avatar-accessories strong { padding: 4px 10px; border-radius: 6px; background: #1a35c4; color: #fff; font-size: 12px; }
+.avatar-accessories small { font-size: 11px; }.avatar-shop > p { text-align: center; color: #6b6b6b; font-size: 12px; margin: 20px 0; }
+.avatar-coming-soon { background: #f4f4f4; color: #999; }.avatar-coming-soon > span { font-size: 38px; }.avatar-coming-soon strong { background: #ddd; color: #6b6b6b; }
+.avatar-locked-icon img { display: block; max-width: none; }
+.avatar-accessory-icon { width: 80px; height: 58px; display: grid; place-items: center; }
+.avatar-accessory-icon > span { width: 0; height: 0; position: relative; }
+.avatar-accessory-icon img { display: block; position: absolute; max-width: none; transform: translate(-50%, -50%); }
+.avatar-message { padding: 12px 16px; border: 1px solid #c4ccff; border-radius: 12px; background: #f4f5ff; overflow-wrap: anywhere; font-size: 14px; }
+.avatar-mascot { width: max-content; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.avatar-mascot__size { transform-origin: top left; }.avatar-mascot__breathing { position: relative; transform-origin: bottom center; animation: onboarding-breathe 3.6s ease-in-out infinite; }
+.avatar-mascot img { display: block; max-width: none; user-select: none; }
+.avatar-mascot__accessory { position: absolute; transform-origin: top left; pointer-events: none; }
+.avatar-mascot__shadow { width: 115px; height: 5px; border-radius: 12px; background: #b0b0b0; }
+.profile-mascot-preview { width: 70px; height: 76px; flex: none; }.profile-mascot-preview > .avatar-mascot { transform: scale(.35); transform-origin: top left; }
+@media (max-width: 750px) { .avatar-editor { grid-template-columns: 1fr; }.avatar-preview { min-height: 226px; }.avatar-accessories { gap: 10px; }.avatar-accessories button, .avatar-coming-soon { min-height: 138px; }.avatar-page > .page-title { padding: 16px; } }
+@media (prefers-reduced-motion: reduce) { .avatar-mascot__breathing { animation: none; } }
+[data-reduced-motion="true"] .avatar-mascot__breathing { animation: none; }

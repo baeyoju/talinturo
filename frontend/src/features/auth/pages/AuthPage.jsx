@@ -4,9 +4,17 @@ import { api } from "@/adapters/http/api";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { LearnerAuthPage } from "./LearnerAuthPage";
 
 // One page for learner sign-in, sign-up and instructor sign-in (via the `mode` / `instructorMode` props).
 export function AuthPage({ mode, onAuth, onToast, instructorMode = false }) {
+  return instructorMode
+    ? <InstructorAuthPage mode={mode} onAuth={onAuth} onToast={onToast} instructorMode />
+    : <LearnerAuthPage mode={mode} onAuth={onAuth} />;
+}
+
+// Keep the existing instructor portal separate from the learner Figma revision.
+function InstructorAuthPage({ mode, onAuth, onToast, instructorMode }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

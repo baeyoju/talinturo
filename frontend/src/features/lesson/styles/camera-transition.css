@@ -1,0 +1,11 @@
+/* Reuse the approved compact transition layout; retain this Figma pose's
+   own intrinsic geometry. Positioning, sizing and breathing remain separate. */
+.camera-transition-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100svh; max-height: none; margin: 0; padding: 0; border: 0; overflow: auto; background: #fff; }
+.camera-transition-dialog::backdrop { background: #fff; }
+.camera-transition { --camera-art-scale: .375; }
+.camera-transition .onboarding-welcome__art { width: calc(409.215px * var(--camera-art-scale)); height: calc(514.073px * var(--camera-art-scale)); }
+.camera-transition .onboarding-welcome__size { width: 409.215px; height: 514.073px; transform: scale(var(--camera-art-scale)); }
+.camera-transition .onboarding-welcome__breathing { width: 409.215px; height: 514.073px; }
+.camera-transition .onboarding-welcome__shadow { width: calc(287.714px * var(--camera-art-scale)); height: calc(11.509px * var(--camera-art-scale)); margin-top: calc(11.48px * var(--camera-art-scale)); }
+@media (max-width: 600px) { .camera-transition { --camera-art-scale: .336; } }
+@media (max-height: 650px) and (min-width: 601px) { .camera-transition { --camera-art-scale: .282; } }

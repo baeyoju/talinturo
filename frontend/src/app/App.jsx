@@ -12,6 +12,7 @@ import { useOAuthErrorToast } from "./hooks/useOAuthErrorToast";
 import { useSession } from "./hooks/useSession";
 import { useSettings } from "./hooks/useSettings";
 import { AuthedRoutes, PublicRoutes } from "./routes";
+import { pathIsMap } from "@/features/path/path-model";
 
 export function App() {
   const prefersReducedMotion = useReducedMotion();
@@ -41,7 +42,7 @@ export function App() {
     observer.observe(topbar);
     updateSidebarOffset();
     return () => observer.disconnect();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, location.pathname]);
 
   // Close the mobile sidebar after navigating.
   useEffect(() => {
@@ -74,7 +75,8 @@ export function App() {
     "--muted": dark ? "#b1b2b8" : "#807a71",
     "--muted-shadow": "none",
   };
-  const onboardingInProgress = location.pathname === "/profile/setup";
+  const onboardingInProgress = location.pathname === "/profile/setup" || location.pathname === "/profile/setup/complete";
+  const pathMap = role === "learner" && pathIsMap(location.pathname);
   const shouldReduceMotion = prefersReducedMotion || settings.reducedMotion;
 
   if (authLoading) {
@@ -92,10 +94,10 @@ export function App() {
   }
 
   return (
-    <div ref={workspaceRef} className={`app-shell workspace-shell ${sidebarOpen && !onboardingInProgress ? "navigation-open" : ""}`} data-theme={settings.themeMode} data-reduced-motion={shouldReduceMotion} style={appStyle}>
-      {!onboardingInProgress && <Sidebar open={sidebarOpen} role={role} user={user} currentStreak={currentStreak} />}
+    <div ref={workspaceRef} className={`app-shell workspace-shell ${onboardingInProgress ? "onboarding-shell" : ""} ${pathMap ? "path-shell" : ""} ${sidebarOpen && !onboardingInProgress ? "navigation-open" : ""}`} data-theme={settings.themeMode} data-reduced-motion={shouldReduceMotion} style={appStyle}>
+      {!onboardingInProgress && <Sidebar open={sidebarOpen} role={role} user={user} currentStreak={currentStreak} pathMap={pathMap} />}
       <div className="main-column">
-        <TopBar
+        {!onboardingInProgress && !pathMap && <TopBar
           headerRef={topbarRef}
           user={user}
           role={role}
@@ -108,17 +110,17 @@ export function App() {
           onCloseSidebar={() => setSidebarOpen(false)}
           onSwitchRole={switchRole}
           onSignOut={signOut}
-        />
+        />}
         <LazyMotion features={domAnimation}>
           <PageMotionContext.Provider value={shouldReduceMotion}>
             <AnimatePresence mode="wait">
               <m.main
                 key={location.pathname}
-                className="content"
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+                className={onboardingInProgress ? "onboarding-content" : pathMap ? "path-content" : "content"}
+                initial={shouldReduceMotion || pathMap ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.22, ease: "easeOut" }}
+                exit={shouldReduceMotion || pathMap ? undefined : { opacity: 0, y: -8 }}
+                transition={{ duration: shouldReduceMotion || pathMap ? 0 : 0.22, ease: "easeOut" }}
               >
                 <AuthedRoutes
                   role={role}
@@ -136,7 +138,7 @@ export function App() {
             </AnimatePresence>
           </PageMotionContext.Provider>
         </LazyMotion>
-        <Footer />
+        {!onboardingInProgress && !pathMap && <Footer />}
       </div>
       <Toast message={toast} onClose={() => setToast("")} />
       <ConnieLoader active={pendingApiRequests > 0} />

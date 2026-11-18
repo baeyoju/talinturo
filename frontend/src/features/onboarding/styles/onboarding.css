@@ -1,0 +1,93 @@
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap");
+
+.app-shell.onboarding-shell { background: #fff; color: #393939; }
+.workspace-shell.onboarding-shell::before { display: none; }
+.onboarding-content { flex: 1; width: 100%; min-width: 0; }
+.onboarding-page { --onboarding-blue: #1a3fbf; --onboarding-border: #b0b0b0; min-height: 100svh; display: flex; flex-direction: column; background: #fff; color: #393939; font-family: "Open Sans", "DM Sans", sans-serif; text-shadow: none; }
+.onboarding-header { width: min(100%, 1314px); padding: 32px 24px 0; margin-inline: auto; }
+.onboarding-header h1 { display: none; }
+.onboarding-stepper ol { position: relative; display: flex; justify-content: space-between; list-style: none; margin: 0; padding: 0; }
+.onboarding-stepper ol::before { content: ""; height: 2px; background: #d7d704; position: absolute; left: 32px; right: 32px; top: 17px; }
+.onboarding-stepper li { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 76px; min-width: 0; font-size: 12px; line-height: 20px; text-align: center; }
+.onboarding-stepper__dot { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid #f66233; border-radius: 50%; background: #fff; }
+.onboarding-stepper__dot img { display: block; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.onboarding-stepper li[data-state="complete"] .onboarding-stepper__dot { background: #0043ce; border-color: #0043ce; }
+.onboarding-stepper li[data-state="current"] { color: var(--onboarding-blue); }
+.onboarding-stepper li[data-state="current"] .onboarding-stepper__dot { border-color: #0043ce; }
+.onboarding-form { display: flex; flex-direction: column; flex: 1; margin: 0; }
+.onboarding-main { flex: 1; width: 100%; padding: clamp(28px, 5svh, 64px) 24px 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+.onboarding-fields { width: min(100%, 788px); font-size: 16px; line-height: 24px; }
+.onboarding-fields label { display: flex; flex-direction: column; gap: 8px; }
+.onboarding-page .onboarding-fields input, .onboarding-page .onboarding-fields select { display: block; width: 100%; min-width: 0; height: 56px; padding: 14px 16px; border: 1px solid var(--onboarding-border); border-radius: 12px; background-color: #fff; color: #393939; font: inherit; box-shadow: none; }
+.onboarding-page .onboarding-fields input::placeholder { color: #929292; }
+.onboarding-page .onboarding-fields select { appearance: none; background-image: url("../../../assets/mascots/onboarding-chevron.svg"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
+.onboarding-page fieldset { min-width: 0; padding: 0; border: 0; margin: 0; }
+.onboarding-page legend { padding: 0; margin-bottom: 12px; }
+.onboarding-birthdate { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.onboarding-choices { display: grid; gap: 16px; }
+.onboarding-page .onboarding-choice { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 18px 24px; min-height: 88px; border: 1px solid var(--onboarding-border); border-radius: 16px; background: #fff; color: #393939; text-align: left; font: inherit; transition: background-color .15s, border-color .15s; }
+.onboarding-choice strong { font-weight: 400; }
+.onboarding-choice span { color: #616161; font-size: 14px; line-height: 20px; }
+.onboarding-page .onboarding-choice[aria-pressed="true"], .onboarding-page .onboarding-skip[aria-pressed="true"] { border-color: var(--onboarding-blue); color: #153299; background: #d4daf0; }
+.onboarding-choice[aria-pressed="true"] span { color: #153299; }
+.onboarding-class-code { padding: 20px; border: 1px solid var(--onboarding-border); border-radius: 16px; }
+.onboarding-class-code p { margin: 12px 0 0; color: #616161; font-size: 14px; }
+.onboarding-divider { display: flex; align-items: center; gap: 12px; margin-block: 16px; }
+.onboarding-divider::before, .onboarding-divider::after { content: ""; flex: 1; height: 1px; background: #dedede; }
+.onboarding-divider span { font-size: 14px; padding-inline: 12px; }
+.onboarding-shell .onboarding-page .onboarding-fields .onboarding-skip { width: 100%; min-height: 52px; border: 1px solid var(--onboarding-border); border-radius: 16px; background: #fff; color: #616161; box-shadow: 0 4px 0 #b7b7b7; font: 700 14px/20px "Open Sans", sans-serif; }
+.onboarding-shell .onboarding-page .onboarding-fields .onboarding-skip[aria-pressed="true"] { border-color: var(--onboarding-blue); background: #d4daf0; color: #153299; }
+.onboarding-class-help { text-align: center; margin: 12px 0 0; font-size: 14px; }
+.onboarding-summary { display: grid; gap: 16px; }
+.onboarding-summary section { border: 1px solid var(--onboarding-border); border-radius: 16px; padding: 20px 24px; }
+.onboarding-summary h3 { color: #153299; font-size: 14px; font-weight: 400; margin: 0 0 8px; }
+.onboarding-summary p, .onboarding-summary dl { margin: 0; overflow-wrap: anywhere; }
+.onboarding-summary dl > div { display: flex; flex-wrap: wrap; column-gap: 6px; margin-block: 4px; }
+.onboarding-summary dt { font-weight: 600; }
+.onboarding-summary dd { margin: 0; overflow-wrap: anywhere; }
+.onboarding-page .onboarding-actions { position: sticky; bottom: 0; z-index: 2; width: 100%; min-height: 104px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px clamp(24px, 8.4vw, 162px) 24px 32px; border-top: 1px solid #dedede; background: #fff; }
+.onboarding-page .onboarding-back { display: inline-flex; align-items: center; justify-content: center; min-width: 80px; min-height: 48px; padding: 0; border: 0; background: none; color: #393939; font: 400 12px/20px "Open Sans", sans-serif; }
+.onboarding-shell .onboarding-page .onboarding-actions .onboarding-continue { width: min(100%, 360px); min-height: 56px; border: 0; border-radius: 16px; box-shadow: 0 4px 0 #112670; background: var(--onboarding-blue); color: #fff; font: 600 18px/24px "Fredoka", "Open Sans", sans-serif; transform: none; }
+.onboarding-shell .onboarding-page .onboarding-actions .onboarding-continue:hover { background: #153299; transform: none; }
+.onboarding-shell .onboarding-page .onboarding-actions .onboarding-continue:disabled { opacity: .55; cursor: wait; }
+.onboarding-page :is(button, a, input, select):focus-visible { outline: 3px solid #0043ce; outline-offset: 4px; }
+.onboarding-error { margin: 16px 0 0; color: #a52727; font-size: 14px; }
+.onboarding-mascot { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.onboarding-mascot__bubble { display: none; }
+/* Layout centering and animation transforms stay on different elements. */
+.onboarding-mascot__anchor { display: grid; place-items: end center; width: 200px; height: clamp(170px, 26svh, 250px); }
+.onboarding-mascot__breathing { width: 138.965px; height: 190.999px; transform-origin: bottom center; animation: onboarding-breathe 3.6s ease-in-out infinite; }
+.onboarding-mascot__breathing img { display: block; width: 138.965px; height: 190.999px; user-select: none; }
+.onboarding-mascot[data-status="warning"] .onboarding-mascot__breathing { animation: onboarding-warning .55s ease-in-out 2, onboarding-breathe 3.6s ease-in-out 1.1s infinite; }
+@keyframes onboarding-breathe { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.028); } }
+@keyframes onboarding-warning { 50% { opacity: .75; } }
+.onboarding-sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip-path: inset(50%); white-space: nowrap; border: 0 !important; }
+
+@media (max-width: 600px) {
+  .onboarding-header { padding: 28px 16px 0; }
+  .onboarding-header h1 { display: block; font-size: 12px; font-weight: 600; line-height: 16px; color: #153299; margin: 0 0 20px; }
+  .onboarding-stepper li { width: calc(100% / 7); font-size: 8px; line-height: 16px; gap: 4px; }
+  .onboarding-stepper__dot { width: 22px; height: 22px; }
+  .onboarding-stepper li[data-state="complete"] img { transform: translate(-50%, -50%) scale(.56); }
+  .onboarding-stepper ol::before { left: 7%; right: 7%; top: 10px; }
+  .onboarding-main { padding: 28px 16px 24px; justify-content: flex-start; gap: 28px; }
+  .onboarding-mascot__bubble { display: grid; place-items: center; position: relative; width: 210px; min-height: 60px; padding: 12px; margin: 0 0 6px; border: 2px solid var(--onboarding-border); border-radius: 10px; color: #153299; text-align: center; font-size: 14px; line-height: 20px; background: #fff; }
+  .onboarding-mascot__bubble::after { content: ""; position: absolute; bottom: -10px; left: calc(50% - 9px); width: 18px; height: 18px; background: #fff; border-right: 2px solid var(--onboarding-border); border-bottom: 2px solid var(--onboarding-border); transform: rotate(45deg); }
+  .onboarding-mascot__anchor { height: 190.999px; width: 160px; }
+  .onboarding-fields { font-size: 14px; line-height: 22px; }
+  .onboarding-page .onboarding-fields input, .onboarding-page .onboarding-fields select { height: 50px; border-radius: 8px; padding: 12px 10px; }
+  .onboarding-page .onboarding-fields select { padding-right: 28px; background-position: right 8px center; }
+  .onboarding-birthdate { gap: 8px; }
+  .onboarding-page .onboarding-choice { padding: 16px; min-height: 76px; border-radius: 8px; }
+  .onboarding-summary section { border-radius: 8px; padding: 16px; }
+  .onboarding-class-code { border-radius: 8px; padding: 16px; }
+  .onboarding-page .onboarding-actions { min-height: 100px; padding: 20px 16px max(24px, env(safe-area-inset-bottom)); gap: 12px; }
+  .onboarding-shell .onboarding-page .onboarding-actions .onboarding-continue { min-height: 52px; width: 100%; font: 700 14px/20px "Open Sans", sans-serif; }
+  .onboarding-page .onboarding-back { min-width: 48px; font-size: 10px; }
+  .onboarding-main[data-step="0"] ~ .onboarding-actions .onboarding-back { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-page .onboarding-mascot__breathing { animation: none; }
+  .onboarding-page * { transition: none !important; }
+}
+[data-reduced-motion="true"] .onboarding-mascot__breathing { animation: none; }

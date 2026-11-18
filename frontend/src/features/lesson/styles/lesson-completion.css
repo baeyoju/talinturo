@@ -1,0 +1,19 @@
+/* Figma 742:2340 and 707:2055, with the approved compact mascot sizing. */
+.lesson-completion { position: fixed; inset: 0; width: 100%; height: 100svh; max-width: none; max-height: none; padding: 0; margin: 0; border: 0; background: #fff; color: #616161; text-shadow: none; font-family: "Open Sans", sans-serif; }
+.lesson-completion::backdrop { background: #fff; }
+.lesson-completion__page { display: flex; flex-direction: column; height: 100%; min-height: 100%; }
+.lesson-completion__main { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 18px; padding: 32px 24px; }
+.lesson-completion__main > * { flex-shrink: 0; }
+.lesson-completion h1 { margin: 0; text-align: center; color: #616161; font: 700 clamp(24px, 2.5vw, 32px)/1.3 "Fredoka", sans-serif; }
+.lesson-completion h1:focus { outline: none; }
+.lesson-completion .lesson-completion__bubble { position: relative; border: 1.5px solid #b0b0b0; border-radius: 12px; padding: 16px 24px; margin-bottom: 10px; max-width: min(100%, 420px); overflow-wrap: anywhere; background: #fff; font: 400 16px/24px "Open Sans", sans-serif; }
+.lesson-completion__bubble::after { content: ""; position: absolute; left: calc(50% - 8px); bottom: -9px; width: 16px; height: 16px; border-right: 1.5px solid #b0b0b0; border-bottom: 1.5px solid #b0b0b0; background: #fff; transform: rotate(45deg); }
+.lesson-completion__main > p { max-width: 540px; margin: 0; text-align: center; font-size: 13px; line-height: 20px; }
+.lesson-completion__rewards { display: flex; justify-content: center; gap: 16px; width: min(100%, 480px); }
+.lesson-completion__rewards > div { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 88px; flex: 1; border: 1px solid #b0b0b0; border-radius: 16px; gap: 6px; }
+.lesson-completion__rewards strong { color: #f66233; font: 700 28px/32px "Fredoka", sans-serif; }.lesson-completion__rewards span { color: #6b6b6b; font-size: 13px; }
+.lesson-completion footer { flex: none; display: flex; justify-content: flex-end; border-top: 1px solid #dedede; padding: 18px clamp(24px, 4.5vw, 72px); }
+.workspace-shell .lesson-completion .button.lesson-completion__continue { width: min(100%, 224px); min-height: 48px; padding: 12px 20px; border: 0; border-radius: 12px; background: #1a3fbf; box-shadow: 0 4px 0 #102673; color: #fff; font: 700 14px/20px "Open Sans", sans-serif; }
+.workspace-shell .lesson-completion .button.lesson-completion__continue:hover { background: #153299; }
+@media (max-width: 600px) { .lesson-completion footer { padding: 16px 20px max(20px, env(safe-area-inset-bottom)); }.workspace-shell .lesson-completion .button.lesson-completion__continue { width: 100%; min-height: 52px; } }
+@media (max-height: 650px) { .lesson-completion__main { gap: 12px; padding: 12px 24px; }.lesson-completion h1 { font-size: 24px; }.lesson-completion .avatar-mascot { transform: scale(.76); margin-block: -24px; }.lesson-completion__rewards > div { min-height: 64px; }.lesson-completion footer { padding-block: 12px; } }
