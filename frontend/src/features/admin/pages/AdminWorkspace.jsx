@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "./api.js";
+import { api } from "@/adapters/http/api";
 
 const emptyOverview = {
   learners: 0, instructors: 0, active_accounts: 0, paths: 0,

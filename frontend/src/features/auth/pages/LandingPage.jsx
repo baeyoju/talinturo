@@ -3,9 +3,8 @@ import { api } from "@/adapters/http/api";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export function LandingPage({ onNavigate, onAuth, onToast }) {
-  const [signup, setSignup] = useState({ name: "", email: "", password: "" });
+  const [signup, setSignup] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const landingRef = useRef(null);
   const headerRef = useRef(null);
 
@@ -60,24 +59,14 @@ export function LandingPage({ onNavigate, onAuth, onToast }) {
     event.preventDefault();
     setLoading(true);
     try {
-      const result = await api("/auth/signup", { method: "POST", body: JSON.stringify(signup) });
+      const name = signup.email.split("@")[0].replace(/[._-]+/g, " ").trim() || "Talinturo learner";
+      const result = await api("/auth/signup", { method: "POST", body: JSON.stringify({ ...signup, name }) });
       onAuth(result.user);
       onNavigate("/profile/setup");
     } catch (error) {
       onToast(`Couldn't create your account: ${error.message}`);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const startGoogleSignup = async () => {
-    setGoogleLoading(true);
-    try {
-      await api("/health");
-      window.location.assign("/api/auth/google?flow=signup");
-    } catch (error) {
-      onToast(`Couldn't reach the account service. Start the Flask API and try again. ${error.message}`);
-      setGoogleLoading(false);
     }
   };
 
@@ -94,7 +83,6 @@ export function LandingPage({ onNavigate, onAuth, onToast }) {
           <a className="public-nav-active" aria-current="location" href="#home">Home <span>•</span></a>
           <a href="#about">About</a>
           <a href="#contact">Contact</a>
-          <button type="button" className="public-header-instructor" onClick={() => onNavigate("/instructor/sign-in")}>Instructor sign in</button>
         </nav>
         <a className="landing-button landing-button-yellow" href="#join">Get Started <span aria-hidden="true">↗</span></a>
       </header>
@@ -125,15 +113,11 @@ export function LandingPage({ onNavigate, onAuth, onToast }) {
             <h2>Join us today!</h2>
             <p>A space to learn, play, and connect.</p>
             <form onSubmit={createAccount}>
-              <label>Your name<input value={signup.name} onChange={(event) => setSignup({ ...signup, name: event.target.value })} autoComplete="name" required maxLength={70} placeholder="How should we call you?" /></label>
               <label>Email<input type="email" value={signup.email} onChange={(event) => setSignup({ ...signup, email: event.target.value })} autoComplete="email" required maxLength={254} placeholder="you@example.com" /></label>
               <label>Password<input type="password" value={signup.password} onChange={(event) => setSignup({ ...signup, password: event.target.value })} autoComplete="new-password" minLength={8} maxLength={128} required placeholder="Create a password" /></label>
-              <button className="landing-button landing-button-blue" type="submit" disabled={loading || googleLoading}>{loading ? "Creating account…" : "Create account"}</button>
+              <button className="landing-button landing-button-blue" type="submit" disabled={loading}>{loading ? "Creating account…" : "Create account"}</button>
             </form>
-            <div className="join-or"><span>or sign up with</span></div>
-            <button className="join-google-button" type="button" disabled={loading || googleLoading} onClick={startGoogleSignup}>{googleLoading ? "Connecting to Google…" : "◎ Sign up with Google"}</button>
             <p className="join-signin">Already learning with us? <button type="button" onClick={() => onNavigate("/login")}>Sign in</button></p>
-            <p className="join-signin join-instructor-link">Teaching with Talinturo? <button type="button" onClick={() => onNavigate("/instructor/sign-in")}>Instructor sign in</button></p>
           </div>
           <div className="join-mascot join-mascot-bird" aria-hidden="true">
             <span className="free-bubble">100% free.<br />For everyone.</span>
@@ -160,9 +144,11 @@ export function LandingPage({ onNavigate, onAuth, onToast }) {
               </div>
             </div>
             <div className="about-features">
-              <article><h3>Learn through everyday moments</h3><p>Build familiarity with useful signs in friendly, real-life situations.</p><span>Explore and recognize</span></article>
-              <article><h3>Practice at your own pace</h3><p>Use guided activities and revisit lessons whenever you need.</p><span>Practice with confidence</span></article>
-              <article><h3>Make learning a shared experience</h3><p>Discover ways to learn together with family, friends, and educators.</p><span>Notice. Practice. Connect.</span></article>
+              <article><h3>Receptive Familiarization</h3><p>Watch, spot, and absorb signs through fun, interactive visual challenges that make learning feel natural.</p><span>Observe & recognize</span></article>
+              <article><h3>AI-Guided Signing</h3><p>Get engaging feedback on your hands using precision MediaPipe 21 tracking and smart ML gesture recognition.</p><span>MediaPipe 21 & Machine Learning</span></article>
+              <article><h3>Contextual Object Interaction</h3><p>Point your camera at real-world items and watch YOLOv6 link your surroundings directly to sign language.</p><span>YOLOv6 Integration</span></article>
+              <article><h3>Real-World Scenario Simulation</h3><p>Step into immersive, everyday roleplay—from classroom conversations and home life to emergency situations.</p><span>Real-world scenarios</span></article>
+              <article><h3>Gamified Mastery & Analytics</h3><p>Unlock achievements, collect points, and track your growing fluency every step of the way.</p><span>Points & Analytics</span></article>
             </div>
           </div>
         </div>
@@ -181,7 +167,6 @@ export function LandingPage({ onNavigate, onAuth, onToast }) {
             ["For FSL Instructors", "Create classrooms, manage learner rosters, and keep track of progress.", "Explore classroom tools"],
           ].map(([title, copy, link], index) => (
             <a className="learner-card" href="#join" key={title}>
-              <span className={`learner-card-art learner-card-art-${index + 1}`} aria-hidden="true">{["🌱", "📚", "✨", "🌼"][index]}</span>
               <strong>{title}</strong><p>{copy}</p><span className="learner-card-link">{link}<b aria-hidden="true">↗</b></span>
             </a>
           ))}
@@ -193,8 +178,8 @@ export function LandingPage({ onNavigate, onAuth, onToast }) {
         <h2>Meet the Team</h2>
         <p className="team-subtitle">Meet the people building TALINTURO.</p>
         <div className="team-layout">
-          <div className="team-art" aria-hidden="true"><span>👋</span><span>💛</span><span>🤟</span></div>
-          <div><h3>One team, one mission.</h3><p>We believe small moments of understanding can make a big difference. Talinturo is here to make Filipino Sign Language learning more welcoming, practical, and joyful for everyone.</p></div>
+          <div className="team-art" aria-hidden="true" />
+          <div><h3>One team, one mission.</h3><p>Behind TALINTURO is a team driven by a shared heart for inclusion and a deep commitment to breaking down the silent barriers that divide our communities. We envision a future where Deaf and hard-of-hearing children in the Philippines often grow up in homes struggling to communicate fluently with their own families, and how dedicated educators try their best to bridge that gap without the right tools. We built TALINTURO not just as a technology project, but as a compassionate answer to that everyday isolation creating a bridge where understanding can finally flourish.</p><p>Our mission is to empower every family, teacher, and learner to connect through Filipino Sign Language with confidence, joy, and empathy.</p></div>
         </div>
       </section>
 

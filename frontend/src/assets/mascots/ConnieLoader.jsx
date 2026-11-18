@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import "./ConnieLoader.css";
+import "@/styles/ConnieLoader.css";
 
 const poses = ["happy", "impressed"];
 

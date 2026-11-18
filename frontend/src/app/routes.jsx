@@ -8,7 +8,7 @@ import { ChallengeFeedbackPage, ChallengePage, ActivityResultsPage, ScenarioActi
 import { LearnerClassroomsPage } from "@/features/classroom";
 import { HelpPage, NotFoundPage } from "@/features/help";
 import {
-  AddStudentsPage, CreateClassroomPage, InstructorClassroomsPage, InstructorHomePage, LearnerDetailsPage, LearnersPage,
+  AddStudentsPage, CameraPage, CreateClassroomPage, InstructorClassroomsPage, InstructorHomePage, LearnerDetailsPage, LearnersPage,
 } from "@/features/instructor";
 import { LessonViewerPage } from "@/features/lesson";
 import { ProfileSetupPage } from "@/features/onboarding";
@@ -68,6 +68,7 @@ export function AuthedRoutes({ role, user, setUser, demoMode, settings, setSetti
       <Route path="/paths/:pathId" element={<LearningPathDetailsPage onNavigate={navigate} reducedMotion={settings.reducedMotion} />} />
       <Route path="/vocabulary" element={<VocabularyPage />} />
       <Route path="/practice" element={<PracticePage onToast={onToast} />} />
+      <Route path="/camera" element={<CameraPage onNavigate={navigate} />} />
       <Route path="/scenarios" element={<ScenariosPage onNavigate={navigate} />} />
       <Route path="/activity" element={<Navigate to="/scenarios" replace />} />
       <Route path="/activity/:activityId" element={<ScenarioActivityPage onNavigate={navigate} />} />
